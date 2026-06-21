@@ -102,11 +102,12 @@ export default function ConsolePage() {
   const [realStats, setRealStats] = useState<ApiNetworkStats | null>(null);
   const [selectedTier, setSelectedTier] = useState<SlaTier>("realtime");
   const [privacyDefault, setPrivacyDefault] = useState(false);
-  const [latencyHistory, setLatencyHistory] = useState<{ t: number; p99: number; p50: number }[]>(
-    Array.from({ length: 20 }, (_, i) => ({ t: i, p99: Math.floor(Math.random() * 200 + 120), p50: Math.floor(Math.random() * 100 + 80) }))
-  );
+  const [latencyHistory, setLatencyHistory] = useState<{ t: number; p99: number; p50: number }[]>([]);
 
   useEffect(() => {
+    setLatencyHistory(
+      Array.from({ length: 20 }, (_, i) => ({ t: i, p99: Math.floor(Math.random() * 200 + 120), p50: Math.floor(Math.random() * 100 + 80) }))
+    );
     const load = () => fetchNetworkStats().then(setRealStats).catch(() => {});
     load();
     const id = setInterval(() => {
