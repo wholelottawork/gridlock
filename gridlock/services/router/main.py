@@ -154,72 +154,72 @@ async def cache_count() -> int:
     return len(_cache_index)
 
 # ---------------------------------------------------------------------------
-# Gap 2: Supabase REST persistence
+# Gap 2: Supabase persistence via official supabase-py client
+# (new sb_secret_/sb_publishable_ key format requires the SDK — raw REST calls
+#  with apikey header return 401 "Forbidden use of secret API key in browser")
 # ---------------------------------------------------------------------------
-def _sb_headers() -> dict:
-    return {
-        "apikey":        SUPABASE_KEY,
-        "Authorization": f"Bearer {SUPABASE_KEY}",
-        "Content-Type":  "application/json",
-    }
+_sb_client = None  # supabase.Client, initialised lazily on first use
+
+def _init_sb() -> object | None:
+    global _sb_client
+    if _sb_client is not None:
+        return _sb_client
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        return None
+    try:
+        from supabase import create_client
+        _sb_client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        print("[supabase] client ready")
+    except Exception as e:
+        print(f"[supabase] init failed: {e}")
+    return _sb_client
+
+async def _sb_run(fn) -> any:
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, fn)
 
 async def db_insert_job(job: dict) -> None:
-    if not SUPABASE_URL or not SUPABASE_KEY:
+    sb = _init_sb()
+    if not sb:
         return
     try:
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            await client.post(
-                f"{SUPABASE_URL}/rest/v1/jobs",
-                headers={**_sb_headers(), "Prefer": "return=minimal"},
-                json=job,
-            )
+        resp = await _sb_run(lambda: sb.table("jobs").insert(job).execute())
+        print(f"[supabase] job saved {job.get('id','?')[:8]}: {getattr(resp, 'data', resp)}")
     except Exception as e:
         print(f"[supabase] insert_job failed: {e}")
 
 async def db_upsert_worker(worker_dict: dict) -> None:
-    if not SUPABASE_URL or not SUPABASE_KEY:
+    sb = _init_sb()
+    if not sb:
         return
     try:
         payload = {**worker_dict, "sla_tiers": json.dumps(worker_dict["sla_tiers"])}
-        async with httpx.AsyncClient(timeout=5.0) as client:
-            await client.post(
-                f"{SUPABASE_URL}/rest/v1/workers",
-                headers={**_sb_headers(), "Prefer": "resolution=merge-duplicates,return=minimal"},
-                json=payload,
-            )
+        await _sb_run(lambda: sb.table("workers").upsert(payload, on_conflict="address").execute())
     except Exception as e:
         print(f"[supabase] upsert_worker failed: {e}")
 
 async def db_load_jobs() -> list[dict]:
-    if not SUPABASE_URL or not SUPABASE_KEY:
+    sb = _init_sb()
+    if not sb:
         return []
     try:
-        async with httpx.AsyncClient(timeout=8.0) as client:
-            resp = await client.get(
-                f"{SUPABASE_URL}/rest/v1/jobs?select=*&order=ts.desc&limit=1000",
-                headers=_sb_headers(),
-            )
-            if resp.status_code == 200:
-                return resp.json()
+        resp = await _sb_run(lambda: sb.table("jobs").select("*").order("ts", desc=True).limit(1000).execute())
+        return resp.data or []
     except Exception as e:
         print(f"[supabase] load_jobs failed: {e}")
     return []
 
 async def db_load_workers() -> list[dict]:
-    if not SUPABASE_URL or not SUPABASE_KEY:
+    sb = _init_sb()
+    if not sb:
         return []
     try:
-        async with httpx.AsyncClient(timeout=8.0) as client:
-            resp = await client.get(
-                f"{SUPABASE_URL}/rest/v1/workers?select=*",
-                headers=_sb_headers(),
-            )
-            if resp.status_code == 200:
-                rows = resp.json()
-                for r in rows:
-                    if isinstance(r.get("sla_tiers"), str):
-                        r["sla_tiers"] = json.loads(r["sla_tiers"])
-                return rows
+        resp = await _sb_run(lambda: sb.table("workers").select("*").execute())
+        rows = resp.data or []
+        for r in rows:
+            if isinstance(r.get("sla_tiers"), str):
+                r["sla_tiers"] = json.loads(r["sla_tiers"])
+        return rows
     except Exception as e:
         print(f"[supabase] load_workers failed: {e}")
     return []
@@ -334,8 +334,12 @@ async def on_startup():
     global _workers_registry
     db_workers = await db_load_workers()
     if db_workers:
+        now = time.time()
+        for w in db_workers:
+            w["last_heartbeat"] = now  # reset so watcher doesn't immediately AutoGate them
+            w["status"] = "Active"
         _workers_registry = [WorkerRecord(**w) for w in db_workers]
-        print(f"[startup] {len(_workers_registry)} workers from Supabase")
+        print(f"[startup] {len(_workers_registry)} workers from Supabase (heartbeats reset)")
     else:
         _workers_registry = _seed_workers()
         print(f"[startup] {len(_workers_registry)} workers seeded (no Supabase)")

@@ -6,3 +6,4 @@ python-dotenv==1.0.1
 redis==5.2.1
 solders==0.22.0
 base58==2.1.1
+supabase>=2.10.0
