@@ -1,0 +1,39 @@
+[toolchain]
+anchor_version = "1.0.2"
+solana_version = "3.1.10"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.devnet]
+fee_collector = "AYpC3BvP95v9d2PxgoY3C51f2LtBtWTwK7aDuoFr25Go"
+job_scheduler = "CQy19zhExHRE8AEe7WwN4e2A8iZM3MJBtYavCj4JGfcp"
+provider_registry = "BY2igYfuWznssCoBGf2Xv1RNniMz9bJs4eMhbCG7JTaX"
+sla_enforcer = "714he4Q3tN95jPAjFZP2tTofqkyzdwTcU9GEMCdNuZBa"
+sla_registry = "5Ry7qmpqXvjGyyXXeESUq61T2Y6AkmXHEedwkcNXv3oL"
+
+[programs.localnet]
+fee_collector = "4mrEY6MWLFCFA2wHuLqDxT6YzgsYaGjXDa4K1idqD79L"
+job_scheduler = "9FpypwgXqgNGsXrgTtzZ4G62tYB5vH8FZKBHzt3sCAJG"
+provider_registry = "FtcDkiVRPSjubZwNktwV1wNw8jvgvGHXHhYsTbvAf6T2"
+sla_enforcer = "4TVPu4tTHfHWLaj8Srbp6v89KHPcN1t5iijNxQrSR4ci"
+sla_registry = "3vJZMJReLan77UZE5nJEZf2UrvwfBe5zv78LBre3UPZM"
+
+[provider]
+cluster = "localnet"
+wallet = "~/.config/solana/id.json"
+
+[workspace]
+members = [
+    "programs/provider-registry",
+    "programs/job-scheduler",
+    "programs/sla-registry",
+    "programs/sla-enforcer",
+    "programs/fee-collector",
+]
+
+[scripts]
+test = "yarn run ts-mocha -p ./tsconfig.json -t 1000000 tests/**/*.ts"
+
+[hooks]

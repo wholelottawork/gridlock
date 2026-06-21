@@ -1,0 +1,271 @@
+@import "tailwindcss";
+
+:root {
+  /* ── Monochrome palette ─────────────────────────────────────────────────── */
+
+  /* Primary accent = pure white */
+  --accent:        #FFFFFF;
+  --accent-2:      #CCCCCC;
+  --accent-3:      #888888;
+  --accent-dim:    rgba(255, 255, 255, 0.05);
+  --accent-border: rgba(255, 255, 255, 0.14);
+  --accent-glow:   rgba(255, 255, 255, 0.07);
+
+  /* Backgrounds — true black stack */
+  --bg-0: #000000;
+  --bg-1: #040404;
+  --bg-2: #080808;
+  --bg-3: #0E0E0E;
+  --bg-4: #181818;
+
+  /* Borders */
+  --border:   rgba(255, 255, 255, 0.07);
+  --border-2: rgba(255, 255, 255, 0.14);
+
+  /* Text */
+  --text-primary:   #FFFFFF;
+  --text-secondary: #777777;
+  --text-muted:     #3A3A3A;
+
+  /* ── Legacy colour aliases → monochrome equivalents ────────────────────── */
+  /* All old var(--orange) references now render white                        */
+  --orange:        #FFFFFF;
+  --orange-2:      #CCCCCC;
+  --orange-3:      #888888;
+  --orange-dim:    rgba(255, 255, 255, 0.05);
+  --orange-border: rgba(255, 255, 255, 0.14);
+  --orange-glow:   rgba(255, 255, 255, 0.07);
+
+  /* Status: bright = good, dim = bad */
+  --green:   #CCCCCC;   /* pass / active  */
+  --red:     #505050;   /* miss / error   */
+  --emerald: #CCCCCC;
+  --purple:  #888888;
+  --yellow:  #888888;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  background: #000000;
+  color: var(--text-primary);
+  font-family: var(--font-geist-sans, system-ui, sans-serif);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Subtle grid texture */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+  background-size: 64px 64px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+main { position: relative; z-index: 1; }
+
+::-webkit-scrollbar { width: 3px; height: 3px; }
+::-webkit-scrollbar-track { background: #000; }
+::-webkit-scrollbar-thumb { background: #222; border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: #444; }
+
+/* ── Ticker ──────────────────────────────────────────────────────────────── */
+@keyframes ticker {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+.ticker-track { animation: ticker 40s linear infinite; }
+.ticker-track:hover { animation-play-state: paused; }
+
+/* ── Pulse dot ───────────────────────────────────────────────────────────── */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.35; transform: scale(0.65); }
+}
+.pulse { animation: pulse-dot 1.8s ease-in-out infinite; }
+
+/* ── Fade-up ─────────────────────────────────────────────────────────────── */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Shimmer ─────────────────────────────────────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -200% center; }
+  100% { background-position:  200% center; }
+}
+
+/* ── Gradient text — white to grey ─────────────────────────────────────── */
+.gradient-text {
+  background: linear-gradient(135deg, #FFFFFF 0%, #888888 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* ── Card base ───────────────────────────────────────────────────────────── */
+.card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 20px;
+  transition: border-color 0.2s;
+}
+.card:hover { border-color: var(--border-2); }
+
+/* Accent card — brighter border, very slight lighter bg */
+.card-orange {
+  border-color: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+/* ── Button base ─────────────────────────────────────────────────────────── */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border-radius: 5px;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  border: none;
+  transition: all 0.16s;
+  text-decoration: none;
+  letter-spacing: 0.2px;
+}
+
+/* White fill — the primary CTA */
+.btn-primary {
+  background: #FFFFFF;
+  color: #000000;
+}
+.btn-primary:hover {
+  background: #E0E0E0;
+  transform: translateY(-1px);
+}
+
+/* Outlined */
+.btn-ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-2);
+}
+.btn-ghost:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+  color: var(--text-primary);
+}
+
+/* ── Tab bar ─────────────────────────────────────────────────────────────── */
+.tab-bar {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  width: fit-content;
+}
+.tab-btn {
+  padding: 6px 16px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  transition: all 0.12s;
+  letter-spacing: 0.2px;
+}
+.tab-btn.active {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-primary);
+}
+.tab-btn:hover:not(.active) { color: var(--text-secondary); }
+
+/* ── Input ───────────────────────────────────────────────────────────────── */
+input[type="text"],
+input[type="number"],
+input {
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 9px 13px;
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.12s;
+  font-family: inherit;
+}
+input:focus { border-color: var(--border-2); }
+input::placeholder { color: var(--text-muted); }
+
+/* ── Table ───────────────────────────────────────────────────────────────── */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.data-table th {
+  padding: 8px 12px;
+  text-align: left;
+  color: var(--text-muted);
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+.data-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+.data-table tr:hover td { background: rgba(255, 255, 255, 0.02); }
+
+/* ── Progress bar ────────────────────────────────────────────────────────── */
+.progress-track {
+  height: 2px;
+  background: var(--bg-4);
+  border-radius: 1px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 1px;
+  transition: width 0.5s ease;
+}
+
+/* ── Toggle switch ───────────────────────────────────────────────────────── */
+.toggle {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  border: 1px solid var(--border-2);
+  cursor: pointer;
+  transition: background 0.18s;
+  background: var(--bg-4);
+  flex-shrink: 0;
+}
+.toggle.on { background: #FFFFFF; border-color: #FFFFFF; }
+.toggle-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-muted);
+  transition: left 0.18s, background 0.18s;
+}
+.toggle.on .toggle-thumb { left: 21px; background: #000000; }
