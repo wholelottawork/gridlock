@@ -10,6 +10,8 @@ const links = [
   { href: "/explorer",    label: "Explorer" },
   { href: "/stake",       label: "Stake" },
   { href: "/leaderboard", label: "Leaderboard" },
+  { href: "/governance",  label: "Governance" },
+  { href: "/docs",        label: "Docs" },
 ];
 
 const WALLET_ICONS: Record<string, string> = {

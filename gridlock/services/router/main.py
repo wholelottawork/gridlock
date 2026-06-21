@@ -563,25 +563,110 @@ async def get_recent_slots() -> int:
         return 0
 
 # ---------------------------------------------------------------------------
-# Worker selection
+# Worker selection — disaggregated Prefill / Decode / Cache routing
 # ---------------------------------------------------------------------------
+
+# In-memory counters for cache hit tracking (fallback when Redis unavailable)
+_cache_hits: int = 0
+_cache_misses: int = 0
+
 def hash_prefix(prompt: str) -> str:
     return hashlib.sha256(prompt[:256].encode()).hexdigest()
 
-def pick_worker(sla_tier: str, confidential: bool, warm_addr: str | None) -> WorkerRecord | None:
-    eligible = [
+async def cache_get_tracked(key: str) -> str | None:
+    """Get from cache and track hit/miss counters."""
+    global _cache_hits, _cache_misses
+    r = await _get_redis()
+    if r:
+        val = await r.hget("gridlock:cache_index", key)
+        if val:
+            await r.incr("gridlock:cache_hits")
+            return val
+        await r.incr("gridlock:cache_misses")
+        return None
+    val = _cache_index.get(key)
+    if val:
+        _cache_hits += 1
+    else:
+        _cache_misses += 1
+    return val
+
+async def cache_set_ttl(key: str, value: str, ttl: int = 3600) -> None:
+    """Set cache entry with per-key TTL tracking."""
+    r = await _get_redis()
+    if r:
+        await r.hset("gridlock:cache_index", key, value)
+        # Track individual key expiry for warm-path TTL enforcement
+        await r.set(f"gridlock:warm:{key}", value, ex=ttl)
+    else:
+        _cache_index[key] = value
+
+async def cache_warm_check(key: str) -> str | None:
+    """Check if a prefix is within its TTL window (warm path only)."""
+    r = await _get_redis()
+    if r:
+        return await r.get(f"gridlock:warm:{key}")
+    return _cache_index.get(key)
+
+async def get_cache_stats() -> dict:
+    """Return hit/miss/total stats."""
+    r = await _get_redis()
+    if r:
+        hits   = int(await r.get("gridlock:cache_hits") or 0)
+        misses = int(await r.get("gridlock:cache_misses") or 0)
+        entries = await r.hlen("gridlock:cache_index")
+    else:
+        hits, misses, entries = _cache_hits, _cache_misses, len(_cache_index)
+    total = hits + misses
+    return {
+        "hits": hits,
+        "misses": misses,
+        "entries": entries,
+        "hit_rate": round(hits / total * 100, 1) if total else 0.0,
+    }
+
+def _active_for_tier(sla_tier: str, confidential: bool) -> list[WorkerRecord]:
+    """Base filter: active workers that accept this tier (and TEE if needed)."""
+    return [
         w for w in _workers_registry
         if w.status == "Active"
         and sla_tier in w.sla_tiers
         and (not confidential or w.tee_capable)
     ]
-    if not eligible:
+
+def pick_prefill_worker(sla_tier: str, confidential: bool, warm_addr: str | None) -> WorkerRecord | None:
+    """Select a Prefill-role worker for context processing (first token)."""
+    pool = [w for w in _active_for_tier(sla_tier, confidential) if w.role == "Prefill"]
+    if not pool:
+        # Graceful fallback: any eligible active worker
+        pool = _active_for_tier(sla_tier, confidential)
+    if not pool:
         return None
+    # Prefer warm-cache worker if still active
     if warm_addr:
-        warm = next((w for w in eligible if w.address == warm_addr), None)
+        warm = next((w for w in pool if w.address == warm_addr), None)
         if warm:
             return warm
-    return max(eligible, key=lambda w: w.goodput_score)
+    # Otherwise pick highest goodput
+    return max(pool, key=lambda w: w.goodput_score)
+
+def pick_decode_worker(sla_tier: str, confidential: bool, prefill_addr: str | None) -> WorkerRecord | None:
+    """Select a Decode-role worker for KV-cache continuation (ongoing generation)."""
+    pool = [w for w in _active_for_tier(sla_tier, confidential) if w.role == "Decode"]
+    if not pool:
+        # Fallback: use prefill worker if no dedicated decode workers
+        return None
+    # Prefer the decode worker with the highest reliability (memory-bound, stable)
+    return max(pool, key=lambda w: w.reliability_score)
+
+def pick_cache_worker() -> WorkerRecord | None:
+    """Select a Cache-role worker for KV-prefix storage lookups."""
+    pool = [w for w in _workers_registry if w.status == "Active" and w.role == "Cache"]
+    return max(pool, key=lambda w: w.goodput_score) if pool else None
+
+def pick_worker(sla_tier: str, confidential: bool, warm_addr: str | None) -> WorkerRecord | None:
+    """Legacy single-worker pick — delegates to prefill selection."""
+    return pick_prefill_worker(sla_tier, confidential, warm_addr)
 
 # ---------------------------------------------------------------------------
 # Pydantic models
@@ -684,10 +769,12 @@ async def chat_completions(
     target_tpot  = SLA_TARGETS[sla_tier]["tpot"]
     customer     = authorization.replace("Bearer ", "")[:12] or "anonymous"
 
-    warm     = await cache_get(hash_prefix(prompt))
-    worker   = pick_worker(sla_tier, confidential, warm)
+    prefix_key = hash_prefix(prompt)
+    warm       = await cache_warm_check(prefix_key)  # TTL-aware warm check
+    worker     = pick_prefill_worker(sla_tier, confidential, warm)
     if not worker:
         raise HTTPException(503, "No eligible workers for this SLA tier")
+    decode_worker = pick_decode_worker(sla_tier, confidential, worker.address)
 
     vllm_payload = {
         "model": req.model,
@@ -739,13 +826,15 @@ async def chat_completions(
                 "sla_tier": sla_tier, "ttft_ms": ttft_ms, "tpot_ms": 0,
                 "sla_met": sla_met, "confidential": confidential,
                 "worker": worker.address[:8], "worker_address": worker.address,
+                "decode_worker": decode_worker.address[:8] if decode_worker else None,
                 "ts": time.time(),
                 "penalty_paid": None if sla_met else round(fee * PENALTY_MULT[sla_tier], 4),
                 "fee": fee, "status": "settling",
+                "cache_warm": warm is not None,
                 "attestation_hash": f"attest_{job_id[:16]}" if confidential else None,
             }
             _jobs_store.append(rec)
-            await cache_set(hash_prefix(prompt), worker.address)
+            await cache_set_ttl(prefix_key, worker.address)
             asyncio.create_task(_settle(job_id, sla_tier, ttft_ms, 0, sla_met, confidential, worker, fee))
             asyncio.create_task(_watcher_sample(job_id, ttft_ms))
 
@@ -806,15 +895,17 @@ async def chat_completions(
     sla_met = ttft_ms <= target_ttft and tpot_ms <= target_tpot
     penalty = None if sla_met else fee * PENALTY_MULT[sla_tier]
 
-    await cache_set(hash_prefix(prompt), worker.address)
+    await cache_set_ttl(prefix_key, worker.address)
 
     job_record = {
         "id": job_id, "customer": customer, "model": req.model,
         "sla_tier": sla_tier, "ttft_ms": ttft_ms, "tpot_ms": tpot_ms,
         "sla_met": sla_met, "confidential": confidential,
         "worker": worker.address[:8], "worker_address": worker.address,
+        "decode_worker": decode_worker.address[:8] if decode_worker else None,
         "ts": time.time(), "penalty_paid": penalty,
         "fee": fee, "status": "settling",
+        "cache_warm": warm is not None,
         "attestation_hash": f"attest_{job_id[:16]}" if confidential else None,
     }
     _jobs_store.append(job_record)
@@ -829,8 +920,11 @@ async def chat_completions(
         "gridlock": {
             "job_id": job_id, "ttft_ms": ttft_ms, "tpot_ms": tpot_ms,
             "sla_tier": sla_tier, "sla_met": sla_met, "sla_target_ttft_ms": target_ttft,
-            "worker": worker.address, "confidential": confidential,
+            "worker": worker.address,
+            "decode_worker": decode_worker.address if decode_worker else None,
+            "confidential": confidential,
             "penalty_due_lock": penalty, "fee_lock": fee,
+            "cache_warm": warm is not None,
             "attestation_hash": f"attest_{job_id[:16]}" if confidential else None,
         },
     }
@@ -927,10 +1021,11 @@ async def network_stats():
     hour   = [j for j in jobs if now - j["ts"] < 3600]
     today  = [j for j in jobs if now - j["ts"] < 86400]
 
-    pass_rate  = round(sum(1 for j in today if j["sla_met"]) / max(len(today), 1) * 100, 1)
-    penalties  = sum((j["penalty_paid"] or 0) for j in jobs)
-    p99        = max((j["ttft_ms"] for j in hour[-100:]), default=245)
-    cache_hits = await cache_count()
+    pass_rate   = round(sum(1 for j in today if j["sla_met"]) / max(len(today), 1) * 100, 1)
+    penalties   = sum((j["penalty_paid"] or 0) for j in jobs)
+    p99         = max((j["ttft_ms"] for j in hour[-100:]), default=245)
+    cache_stats = await get_cache_stats()
+    warm_rate   = round(sum(1 for j in jobs if j.get("cache_warm")) / max(len(jobs), 1) * 100, 1)
 
     return {
         "active_workers":       len(active),
@@ -943,10 +1038,14 @@ async def network_stats():
         "total_penalties_lock": round(penalties, 4),
         "confidential_share":   round(sum(1 for j in hour if j["confidential"]) / max(len(hour), 1) * 100, 1),
         "lock_burned":          round(_total_lock_burned, 4),
-        # bonus fields for health dashboards
         "total_workers":        len(_workers_registry),
         "requests_today":       len(today),
-        "cache_hit_entries":    cache_hits,
+        "cache_hit_entries":    cache_stats["entries"],
+        "cache_hit_rate":       cache_stats["hit_rate"],
+        "warm_path_rate":       warm_rate,
+        # P/D role breakdown
+        "prefill_workers":      sum(1 for w in active if w.role == "Prefill"),
+        "decode_workers":       sum(1 for w in active if w.role == "Decode"),
     }
 
 # ---------------------------------------------------------------------------
@@ -998,6 +1097,82 @@ async def live_stream():
         generate(), media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+# ---------------------------------------------------------------------------
+# /v1/models — available models with pricing
+# ---------------------------------------------------------------------------
+@app.get("/v1/models")
+def list_models():
+    models = [
+        {
+            "id": "llama-3.1-8b-instant",
+            "provider": "Meta via Groq",
+            "context_window": 131072,
+            "parameters": "8B",
+            "base_fee_lock_per_1m": 2.0,
+            "tier_multipliers": {"batch": 0.4, "standard": 1.0, "realtime": 2.0, "confidential": 2.5},
+        },
+        {
+            "id": "llama-3.1-70b-versatile",
+            "provider": "Meta via Groq",
+            "context_window": 131072,
+            "parameters": "70B",
+            "base_fee_lock_per_1m": 8.0,
+            "tier_multipliers": {"batch": 0.4, "standard": 1.0, "realtime": 2.0, "confidential": 2.5},
+        },
+        {
+            "id": "mixtral-8x7b-32768",
+            "provider": "Mistral via Groq",
+            "context_window": 32768,
+            "parameters": "56B (MoE)",
+            "base_fee_lock_per_1m": 2.0,
+            "tier_multipliers": {"batch": 0.4, "standard": 1.0, "realtime": 2.0, "confidential": 2.5},
+        },
+    ]
+    return {"models": models, "total": len(models)}
+
+# ---------------------------------------------------------------------------
+# /v1/stats/cache — KV-cache prefix hit/miss statistics
+# ---------------------------------------------------------------------------
+@app.get("/v1/stats/cache")
+async def cache_stats():
+    stats = await get_cache_stats()
+    return {
+        **stats,
+        "cache_ttl_secs": 3600,
+        "strategy": "prompt-prefix SHA-256 (first 256 chars)",
+    }
+
+# ---------------------------------------------------------------------------
+# /v1/stats/pd — disaggregated Prefill / Decode split summary
+# ---------------------------------------------------------------------------
+@app.get("/v1/stats/pd")
+def pd_stats():
+    prefill_workers = [w for w in _workers_registry if w.role == "Prefill" and w.status == "Active"]
+    decode_workers  = [w for w in _workers_registry if w.role == "Decode"  and w.status == "Active"]
+    cache_workers   = [w for w in _workers_registry if w.role == "Cache"   and w.status == "Active"]
+    router_workers  = [w for w in _workers_registry if w.role == "Router"  and w.status == "Active"]
+
+    jobs = list(_jobs_store)
+    warm_hits   = sum(1 for j in jobs if j.get("cache_warm"))
+    total_jobs  = len(jobs)
+    return {
+        "prefill_workers":  len(prefill_workers),
+        "decode_workers":   len(decode_workers),
+        "cache_workers":    len(cache_workers),
+        "router_workers":   len(router_workers),
+        "warm_cache_hits":  warm_hits,
+        "warm_cache_rate":  round(warm_hits / total_jobs * 100, 1) if total_jobs else 0.0,
+        "total_jobs":       total_jobs,
+        "avg_prefill_goodput": (
+            round(sum(w.goodput_score for w in prefill_workers) / len(prefill_workers))
+            if prefill_workers else 0
+        ),
+        "avg_decode_reliability": (
+            round(sum(w.reliability_score for w in decode_workers) / len(decode_workers))
+            if decode_workers else 0
+        ),
+    }
 
 # ---------------------------------------------------------------------------
 # /health

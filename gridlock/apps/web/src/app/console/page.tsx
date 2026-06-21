@@ -13,7 +13,7 @@ import {
   type ChatGridlockMeta,
 } from "@/lib/api-client";
 
-type Tab = "playground" | "overview" | "monitor" | "penalties" | "keys";
+type Tab = "playground" | "overview" | "monitor" | "penalties" | "keys" | "billing";
 
 const MODELS = [
   { value: "llama-3.1-8b-instant",     label: "LLaMA 3.1 8B  (fast)" },
@@ -173,6 +173,7 @@ export default function ConsolePage() {
           ["monitor",    "Monitor"],
           ["penalties",  "Penalties"],
           ["keys",       "API Keys"],
+          ["billing",    "Billing"],
         ] as [Tab, string][]).map(([t, l]) => (
           <button key={t} onClick={() => setTab(t)} className={`tab-btn${tab === t ? " active" : ""}`}>{l}</button>
         ))}
@@ -576,6 +577,128 @@ export default function ConsolePage() {
           </div>
         </div>
       )}
+
+      {/* ── BILLING ──────────────────────────────────────────────────────────── */}
+      {tab === "billing" && (() => {
+        const usageByModel = [
+          { model: "llama-3.1-8b-instant",    requests: 41_820, tokens: 18_293_400, spend: 36.59, pct: 87 },
+          { model: "llama-3.1-70b-versatile", requests: 4_211,  tokens: 3_844_200,  spend: 30.75, pct: 10 },
+          { model: "mixtral-8x7b-32768",      requests: 1_260,  tokens: 892_100,    spend: 1.78,  pct: 3 },
+        ];
+        const usageByTier = [
+          { tier: "Realtime",     requests: 12_400, spend: 24.80, pct: 36, color: "var(--orange)" },
+          { tier: "Standard",     requests: 28_891, spend: 28.89, pct: 52, color: "var(--green)" },
+          { tier: "Batch",        requests: 4_700,  spend: 4.70,  pct: 9,  color: "var(--text-secondary)" },
+          { tier: "Confidential", requests: 1_300,  spend: 10.73, pct: 3,  color: "var(--purple)" },
+        ];
+        const invoices = [
+          { period: "May 2025",  amount: 69.12, status: "paid",    txId: "5xKm…r9Qw" },
+          { period: "Apr 2025",  amount: 54.88, status: "paid",    txId: "3nPw…v4Tb" },
+          { period: "Mar 2025",  amount: 31.44, status: "paid",    txId: "8qYv…k2Mn" },
+        ];
+        const totalSpend = usageByTier.reduce((s, t) => s + t.spend, 0);
+        const totalRequests = usageByTier.reduce((s, t) => s + t.requests, 0);
+        const totalTokens = usageByModel.reduce((s, m) => s + m.tokens, 0);
+        const creditBalance = 150.00;
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {/* Summary stats */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+              {[
+                { label: "MTD SPEND",       value: `${totalSpend.toFixed(2)} LOCK`,           accent: "var(--orange)" },
+                { label: "CREDIT BALANCE",  value: `${creditBalance.toFixed(2)} LOCK`,        accent: "var(--green)" },
+                { label: "REQUESTS (MTD)",  value: totalRequests.toLocaleString(),            accent: "var(--text-primary)" },
+                { label: "TOKENS (MTD)",    value: `${(totalTokens / 1_000_000).toFixed(1)}M`, accent: "var(--text-secondary)" },
+              ].map((s) => (
+                <div key={s.label} className="card">
+                  <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 10 }}>{s.label}</div>
+                  <div style={{ fontSize: 22, fontWeight: 900, color: s.accent }}>{s.value}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Usage by tier */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              <div className="card">
+                <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 14 }}>SPEND BY SLA TIER</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {usageByTier.map((t) => (
+                    <div key={t.tier}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: t.color }}>{t.tier}</span>
+                        <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{t.spend.toFixed(2)} LOCK · {t.requests.toLocaleString()} req</span>
+                      </div>
+                      <div className="progress-track">
+                        <div className="progress-fill" style={{ width: `${t.pct}%`, background: t.color }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="card">
+                <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 14 }}>SPEND BY MODEL</div>
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {usageByModel.map((m) => (
+                    <div key={m.model}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                        <span style={{ fontSize: 11, fontFamily: "monospace", color: "var(--text-secondary)" }}>{m.model.split("-").slice(0, 3).join("-")}</span>
+                        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{m.spend.toFixed(2)} LOCK</span>
+                      </div>
+                      <div className="progress-track">
+                        <div className="progress-fill" style={{ width: `${m.pct}%`, background: "var(--orange)" }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Pricing */}
+            <div className="card">
+              <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 14 }}>PRICING (LOCK per 1M tokens)</div>
+              <table className="data-table">
+                <thead><tr>{["Model", "Batch", "Standard", "Realtime", "Confidential"].map((h) => <th key={h}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {[
+                    ["llama-3.1-8b-instant",    "0.8",  "2.0",  "4.0",  "5.0"],
+                    ["llama-3.1-70b-versatile", "3.2",  "8.0",  "16.0", "20.0"],
+                    ["mixtral-8x7b-32768",      "0.8",  "2.0",  "4.0",  "5.0"],
+                  ].map(([model, ...prices]) => (
+                    <tr key={model}>
+                      <td style={{ fontFamily: "monospace", fontSize: 12, color: "var(--text-secondary)" }}>{model}</td>
+                      {prices.map((p, i) => (
+                        <td key={i} style={{ color: "var(--orange)", fontWeight: 700 }}>{p} LOCK</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Invoice history */}
+            <div className="card">
+              <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 14 }}>INVOICE HISTORY</div>
+              <table className="data-table">
+                <thead><tr>{["Period", "Amount", "Status", "On-Chain Tx"].map((h) => <th key={h}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {invoices.map((inv) => (
+                    <tr key={inv.period}>
+                      <td style={{ fontWeight: 600 }}>{inv.period}</td>
+                      <td style={{ color: "var(--orange)", fontWeight: 700 }}>{inv.amount.toFixed(2)} LOCK</td>
+                      <td><span style={{ fontSize: 10, fontWeight: 700, color: "var(--green)", background: "rgba(0,220,100,0.08)", padding: "2px 7px", borderRadius: 3 }}>{inv.status.toUpperCase()}</span></td>
+                      <td style={{ fontFamily: "monospace", fontSize: 11, color: "var(--text-muted)" }}>{inv.txId}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div style={{ marginTop: 14, fontSize: 12, color: "var(--text-muted)" }}>
+                Payments are settled automatically each month. Fees are deducted from your credit balance in LOCK.
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── API KEYS ─────────────────────────────────────────────────────────── */}
       {tab === "keys" && (

@@ -5,6 +5,7 @@ members = [
     "programs/sla-registry",
     "programs/sla-enforcer",
     "programs/fee-collector",
+    "programs/governance",
 ]
 resolver = "2"
 
