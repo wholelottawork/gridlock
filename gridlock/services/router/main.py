@@ -58,6 +58,7 @@ async def auth_middleware(request: Request, call_next):
 # Config
 # ---------------------------------------------------------------------------
 VLLM_ENDPOINT       = os.getenv("VLLM_ENDPOINT",       "http://localhost:8000")
+VLLM_API_KEY        = os.getenv("VLLM_API_KEY",        "")
 REDIS_URL           = os.getenv("REDIS_URL",            "redis://localhost:6379")
 SOLANA_RPC_URL      = os.getenv("SOLANA_RPC_URL",       "https://api.devnet.solana.com")
 ROUTER_KEYPAIR_PATH = os.getenv("ROUTER_KEYPAIR_PATH",  "~/.config/solana/id.json")
@@ -701,8 +702,9 @@ async def chat_completions(
             token_count = 0
             try:
                 async with httpx.AsyncClient(timeout=60.0) as client:
+                    _headers = {"Authorization": f"Bearer {VLLM_API_KEY}"} if VLLM_API_KEY else {}
                     async with client.stream(
-                        "POST", f"{worker.endpoint}/v1/chat/completions", json=vllm_payload
+                        "POST", f"{worker.endpoint}/v1/chat/completions", json=vllm_payload, headers=_headers
                     ) as resp:
                         async for line in resp.aiter_lines():
                             if not line.startswith("data:"):
