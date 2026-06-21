@@ -758,21 +758,30 @@ async def chat_completions(
     ttft_ms = tpot_ms = 0
 
     try:
+        _bk_headers = {"Authorization": f"Bearer {VLLM_API_KEY}"} if VLLM_API_KEY else {}
         async with httpx.AsyncClient(timeout=30.0) as client:
             async with client.stream(
-                "POST", f"{worker.endpoint}/v1/chat/completions", json=vllm_payload
+                "POST", f"{worker.endpoint}/v1/chat/completions",
+                json=vllm_payload, headers=_bk_headers,
             ) as resp:
+                resp.raise_for_status()
                 async for line in resp.aiter_lines():
                     if not line.startswith("data:"):
                         continue
-                    chunk = line[6:]
-                    if chunk == "[DONE]":
+                    raw = line[5:].strip()   # strip "data:" then whitespace
+                    if raw == "[DONE]":
                         break
                     now = time.perf_counter()
                     if first_token_ts is None:
                         first_token_ts = now
                         ttft_ms = int((now - accept_ts) * 1000)
-                    tokens.append(chunk)
+                    try:
+                        data = json.loads(raw)
+                        text = data["choices"][0]["delta"].get("content", "")
+                        if text:
+                            tokens.append(text)
+                    except (json.JSONDecodeError, KeyError, IndexError):
+                        pass
     except (httpx.ConnectError, httpx.TimeoutException):
         await asyncio.sleep(0.15)
         first_token_ts = time.perf_counter()
@@ -781,6 +790,11 @@ async def chat_completions(
             await asyncio.sleep(0.02)
             tokens.append(t)
         tpot_ms = 20
+    except httpx.HTTPStatusError as e:
+        print(f"[backend] HTTP {e.response.status_code}: {e.response.text[:200]}")
+        tokens.append(f"Backend error {e.response.status_code}")
+        first_token_ts = time.perf_counter()
+        ttft_ms = int((first_token_ts - accept_ts) * 1000)
 
     if first_token_ts and len(tokens) > 1:
         tpot_ms = int(((time.perf_counter() - first_token_ts) / max(len(tokens), 1)) * 1000)
