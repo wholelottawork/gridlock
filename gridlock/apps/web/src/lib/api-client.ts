@@ -185,6 +185,47 @@ export async function fetchLeaderboard(
   );
 }
 
+// ─── Cache & P/D stats ───────────────────────────────────────────────────────
+
+export interface ApiCacheStats {
+  hits: number;
+  misses: number;
+  entries: number;
+  hit_rate: number;
+  strategy: string;
+}
+
+export interface ApiPdStats {
+  prefill_workers: number;
+  decode_workers: number;
+  cache_workers: number;
+  router_workers: number;
+  warm_cache_rate: number;
+}
+
+export async function fetchCacheStats(): Promise<ApiCacheStats> {
+  return get<ApiCacheStats>("/v1/stats/cache");
+}
+
+export async function fetchPdStats(): Promise<ApiPdStats> {
+  return get<ApiPdStats>("/v1/stats/pd");
+}
+
+// ─── Autoscale signal ─────────────────────────────────────────────────────────
+
+export interface ApiAutoscaleSignal {
+  recommendation: "stable" | "scale_up_prefill" | "scale_up_decode" | "scale_down";
+  queue_pressure: number;
+  ttft_pressure: number;
+  scale_targets: { Prefill?: number; Decode?: number };
+  active_workers: number;
+  inflight: number;
+}
+
+export async function fetchAutoscaleSignal(): Promise<ApiAutoscaleSignal> {
+  return get<ApiAutoscaleSignal>("/v1/autoscale/signal");
+}
+
 // ─── Health ───────────────────────────────────────────────────────────────────
 
 export async function fetchHealth(): Promise<{

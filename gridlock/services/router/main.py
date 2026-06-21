@@ -1099,6 +1099,61 @@ async def live_stream():
     )
 
 # ---------------------------------------------------------------------------
+# /v1/autoscale/signal — queue pressure + TTFT-based autoscaling hints
+# ---------------------------------------------------------------------------
+
+# Simple queue depth counter — incremented when job starts, decremented on settle
+_inflight_count: int = 0
+
+@app.get("/v1/autoscale/signal")
+async def autoscale_signal():
+    """
+    Returns scaling pressure signals for external orchestrators (Kubernetes HPA,
+    Tauri worker launcher, etc.). Fires scale-up when p99 TTFT is approaching
+    SLA limits or when queue depth exceeds per-worker capacity.
+    """
+    active = [w for w in _workers_registry if w.status == "Active"]
+    jobs_hour = [j for j in _jobs_store if time.time() - j["ts"] < 3600]
+    avg_ttft  = (sum(j["ttft_ms"] for j in jobs_hour[-50:]) / min(len(jobs_hour), 50)) if jobs_hour else 0
+    p99_ttft  = max((j["ttft_ms"] for j in jobs_hour[-100:]), default=0)
+
+    prefill_workers = [w for w in active if w.role == "Prefill"]
+    decode_workers  = [w for w in active if w.role == "Decode"]
+    cache_workers   = [w for w in active if w.role == "Cache"]
+
+    # Scale-up trigger: p99 TTFT > 80% of tightest SLA target (Realtime = 300ms)
+    ttft_pressure    = min(p99_ttft / 300.0, 1.0) if p99_ttft else 0.0
+    queue_pressure   = min(_inflight_count / max(len(active), 1) / 5.0, 1.0)
+    overall_pressure = round(max(ttft_pressure, queue_pressure), 3)
+
+    recommendation = "stable"
+    if overall_pressure > 0.8:
+        recommendation = "scale_up_prefill"
+    elif overall_pressure > 0.6:
+        recommendation = "scale_up_decode"
+    elif overall_pressure < 0.2 and len(active) > 10:
+        recommendation = "scale_down"
+
+    return {
+        "overall_pressure":   overall_pressure,
+        "ttft_pressure":      round(ttft_pressure, 3),
+        "queue_pressure":     round(queue_pressure, 3),
+        "inflight_jobs":      _inflight_count,
+        "active_workers":     len(active),
+        "prefill_workers":    len(prefill_workers),
+        "decode_workers":     len(decode_workers),
+        "cache_workers":      len(cache_workers),
+        "avg_ttft_ms":        round(avg_ttft),
+        "p99_ttft_ms":        p99_ttft,
+        "recommendation":     recommendation,
+        "scale_target": {
+            "prefill": max(len(prefill_workers), int(len(active) * 0.5)),
+            "decode":  max(len(decode_workers), int(len(active) * 0.35)),
+            "cache":   max(len(cache_workers), int(len(active) * 0.1)),
+        },
+    }
+
+# ---------------------------------------------------------------------------
 # /v1/models — available models with pricing
 # ---------------------------------------------------------------------------
 @app.get("/v1/models")

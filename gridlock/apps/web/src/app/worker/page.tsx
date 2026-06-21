@@ -1,9 +1,11 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
+import { useWallet } from "@solana/wallet-adapter-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 import { generateJobs, type Job } from "@/lib/mock-data";
 import { ChartWrapper } from "@/components/chart-wrapper";
+import { fetchWorker, fetchJobs, type ApiWorker, type ApiJob } from "@/lib/api-client";
 
 type WorkerState = "Active" | "Paused" | "Draining";
 
@@ -16,26 +18,57 @@ function generateLatencyPoints(n = 20) {
 }
 
 export default function WorkerPage() {
-  const [status, setStatus] = useState<WorkerState>("Active");
+  const { publicKey, connected } = useWallet();
+  const [mounted, setMounted] = useState(false);
+
+  // Real API state
+  const [workerData, setWorkerData]   = useState<ApiWorker | null>(null);
+  const [apiJobs, setApiJobs]         = useState<ApiJob[] | null>(null);
+  const [apiLoading, setApiLoading]   = useState(false);
+  const [notRegistered, setNotRegistered] = useState(false);
+
+  // Local UI state
+  const [status, setStatus]           = useState<WorkerState>("Active");
   const [confidential, setConfidential] = useState(false);
-  const [latency, setLatency] = useState<ReturnType<typeof generateLatencyPoints>>([]);
-  const [jobs, setJobs] = useState<Job[]>([]);
-  const [earnings, setEarnings] = useState({ lock: 142.38, confidentialPremium: 9.44 });
-  const [slaPass, setSlaPass] = useState(98.2);
-  const [goodput, setGoodput] = useState(847);
-  const [reliabilityScore] = useState(9240);
-  const [stakedLock] = useState(25000);
-  const [inFlight, setInFlight] = useState(3);
+  const [latency, setLatency]         = useState<ReturnType<typeof generateLatencyPoints>>([]);
+  const [mockJobs, setMockJobs]       = useState<Job[]>([]);
+  const [earnings, setEarnings]       = useState({ lock: 142.38, confidentialPremium: 9.44 });
+  const [slaPass, setSlaPass]         = useState(98.2);
+  const [goodput, setGoodput]         = useState(847);
+  const [inFlight, setInFlight]       = useState(3);
   const drainTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  useEffect(() => { setMounted(true); }, []);
+
+  // Seed mock data for fallback
   useEffect(() => {
     setLatency(generateLatencyPoints());
-    setJobs(generateJobs(8));
+    setMockJobs(generateJobs(8));
   }, []);
 
+  // Fetch real worker data when wallet connects
+  useEffect(() => {
+    if (!publicKey) { setWorkerData(null); setApiJobs(null); setNotRegistered(false); return; }
+    setApiLoading(true);
+    setNotRegistered(false);
+    const addr = publicKey.toBase58();
+    Promise.all([
+      fetchWorker(addr).catch((err) => {
+        if (String(err).includes("404") || String(err).includes("Not Found")) setNotRegistered(true);
+        return null;
+      }),
+      fetchJobs({ worker: addr, limit: 20 }).catch(() => null),
+    ]).then(([wd, jobs]) => {
+      setWorkerData(wd);
+      if (wd) setConfidential(wd.is_confidential);
+      setApiJobs(jobs?.jobs ?? null);
+    }).finally(() => setApiLoading(false));
+  }, [publicKey]);
+
+  // Live mock update when no real worker connected
   useEffect(() => {
     const id = setInterval(() => {
-      if (status !== "Active") return;
+      if (status !== "Active" || workerData) return;
       setLatency((prev) => [
         ...prev.slice(1),
         { t: String(Date.now()), ttft: Math.floor(Math.random() * 200 + 100), tpot: Math.floor(Math.random() * 60 + 30) },
@@ -46,10 +79,10 @@ export default function WorkerPage() {
       }));
       setSlaPass((p) => parseFloat(Math.min(99.9, p + (Math.random() - 0.48) * 0.1).toFixed(1)));
       setGoodput((g) => Math.max(100, g + Math.floor((Math.random() - 0.4) * 40)));
-      setJobs(generateJobs(8));
+      setMockJobs(generateJobs(8));
     }, 1500);
     return () => clearInterval(id);
-  }, [status, confidential]);
+  }, [status, confidential, workerData]);
 
   function handleToggle() {
     if (status === "Active") {
@@ -64,21 +97,54 @@ export default function WorkerPage() {
     }
   }
 
+  // Derived display values — real data wins over mock
+  const dispEarnings    = workerData ? workerData.earnings_today : earnings.lock;
+  const dispSlaPass     = workerData ? workerData.sla_pass_rate : slaPass;
+  const dispGoodput     = workerData ? workerData.goodput_score : goodput;
+  const dispReliability = workerData ? workerData.reliability_score : 9240;
+  const dispStake       = workerData ? workerData.staked_lock : 25000;
+  const dispRole        = workerData ? workerData.role : "Prefill";
+  const dispHW          = workerData ? workerData.hardware_tier : "RTX 4090";
+  const dispAddr        = mounted && publicKey
+    ? `${publicKey.toBase58().slice(0, 4)}…${publicKey.toBase58().slice(-4)}`
+    : "7xKm…b3Rq";
+
+  const jobs       = apiJobs ?? mockJobs;
   const statusColor = status === "Active" ? "var(--green)" : status === "Draining" ? "var(--yellow)" : "var(--text-secondary)";
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }}
       style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px" }}>
 
+      {/* Not registered notice */}
+      {mounted && connected && notRegistered && (
+        <div style={{ marginBottom: 20, padding: "14px 18px", borderRadius: 8, background: "rgba(255,160,0,0.06)", border: "1px solid rgba(255,160,0,0.2)", fontSize: 13, color: "var(--orange)", lineHeight: 1.6 }}>
+          <strong>Wallet connected but not registered as a worker.</strong> Go to the Docs page to learn how to register your GPU and start earning LOCK.
+        </div>
+      )}
+
+      {/* API loading indicator */}
+      {apiLoading && (
+        <div style={{ marginBottom: 14, fontSize: 12, color: "var(--text-muted)" }}>
+          Fetching worker data…
+        </div>
+      )}
+
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 28 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 4, letterSpacing: "-0.3px" }}>Worker Dashboard</h1>
           <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
-            <span style={{ fontFamily: "monospace" }}>7xKm…b3Rq</span>
+            <span style={{ fontFamily: "monospace" }}>{dispAddr}</span>
             <span style={{ margin: "0 8px", color: "var(--border-2)" }}>·</span>
-            RTX 4090
+            {dispHW}
             <span style={{ margin: "0 8px", color: "var(--border-2)" }}>·</span>
-            Prefill
+            {dispRole}
+            {workerData && (
+              <>
+                <span style={{ margin: "0 8px", color: "var(--border-2)" }}>·</span>
+                <span style={{ color: "var(--green)", fontSize: 11, fontWeight: 700 }}>LIVE</span>
+              </>
+            )}
           </div>
         </div>
         <span style={{
@@ -89,7 +155,7 @@ export default function WorkerPage() {
           color: statusColor, fontSize: 12, fontWeight: 700,
         }}>
           <span className={status === "Active" ? "pulse" : ""} style={{ width: 6, height: 6, borderRadius: "50%", background: statusColor, display: "inline-block" }} />
-          {status.toUpperCase()}
+          {workerData ? workerData.status.toUpperCase() : status.toUpperCase()}
         </span>
       </div>
 
@@ -126,22 +192,41 @@ export default function WorkerPage() {
                 <div className="toggle-thumb" />
               </div>
             </div>
+
+            {workerData && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                <div style={{ background: "var(--bg-3)", borderRadius: 6, padding: "10px" }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text-primary)" }}>{workerData.jobs_today}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)" }}>jobs today</div>
+                </div>
+                <div style={{ background: "var(--bg-3)", borderRadius: 6, padding: "10px" }}>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: "var(--red)" }}>{workerData.penalties_paid.toFixed(4)}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)" }}>LOCK penalized</div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Earnings */}
         <div className="card card-orange">
           <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 16 }}>EARNINGS TODAY</div>
-          <div style={{ fontSize: 38, fontWeight: 900, color: "var(--orange)", letterSpacing: "-1px" }}>{earnings.lock.toFixed(2)}</div>
+          <div style={{ fontSize: 38, fontWeight: 900, color: "var(--orange)", letterSpacing: "-1px" }}>{dispEarnings.toFixed(2)}</div>
           <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 16 }}>LOCK</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             <div style={{ background: "var(--bg-3)", borderRadius: 6, padding: "10px" }}>
-              <div style={{ fontSize: 16, fontWeight: 700 }}>{jobs.filter((j) => j.slaMet).length}/{jobs.length}</div>
-              <div style={{ fontSize: 11, color: "var(--text-muted)" }}>SLA met / batch</div>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>
+                {workerData
+                  ? `${workerData.jobs_today}`
+                  : `${jobs.filter((j) => (j as Job).slaMet).length}/${jobs.length}`}
+              </div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{workerData ? "jobs today" : "SLA met / batch"}</div>
             </div>
             <div style={{ background: confidential ? "rgba(255,255,255,0.04)" : "var(--bg-3)", borderRadius: 6, padding: "10px", border: confidential ? "1px solid var(--border-2)" : "1px solid transparent" }}>
-              <div style={{ fontSize: 16, fontWeight: 700, color: confidential ? "var(--purple)" : "var(--text-secondary)" }}>+{earnings.confidentialPremium.toFixed(2)}</div>
-              <div style={{ fontSize: 11, color: "var(--text-muted)" }}>TEE premium</div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: confidential ? "var(--purple)" : "var(--text-secondary)" }}>
+                {workerData ? workerData.p99_ttft_ms + "ms" : `+${earnings.confidentialPremium.toFixed(2)}`}
+              </div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{workerData ? "p99 TTFT" : "TEE premium"}</div>
             </div>
           </div>
         </div>
@@ -149,15 +234,17 @@ export default function WorkerPage() {
         {/* SLA Performance */}
         <div className="card">
           <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 16 }}>SLA PERFORMANCE</div>
-          <div style={{ fontSize: 38, fontWeight: 900, color: slaPass >= 99 ? "var(--green)" : slaPass >= 97 ? "var(--yellow)" : "var(--red)", letterSpacing: "-1px" }}>
-            {slaPass}%
+          <div style={{ fontSize: 38, fontWeight: 900, color: dispSlaPass >= 99 ? "var(--green)" : dispSlaPass >= 97 ? "var(--yellow)" : "var(--red)", letterSpacing: "-1px" }}>
+            {dispSlaPass.toFixed(1)}%
           </div>
           <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14 }}>pass rate</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {(["realtime", "standard", "confidential"] as const).map((tier) => {
-              const tierJobs = jobs.filter((j) => j.slaTier === tier);
-              const passed = tierJobs.filter((j) => j.slaMet).length;
-              const pct = tierJobs.length ? Math.round((passed / tierJobs.length) * 100) : 100;
+              const tierJobs = (jobs as (Job | ApiJob)[]).filter((j) =>
+                ("slaTier" in j ? j.slaTier : (j as ApiJob).sla_tier) === tier
+              );
+              const passed = tierJobs.filter((j) => "slaMet" in j ? j.slaMet : (j as ApiJob).sla_met).length;
+              const pct = tierJobs.length ? Math.round((passed / tierJobs.length) * 100) : (dispSlaPass > 0 ? Math.round(dispSlaPass) : 100);
               const colors: Record<string, string> = { realtime: "var(--green)", standard: "var(--orange)", confidential: "var(--purple)" };
               return (
                 <div key={tier}>
@@ -201,7 +288,7 @@ export default function WorkerPage() {
         {/* Goodput */}
         <div className="card">
           <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 14 }}>GOODPUT</div>
-          <div style={{ fontSize: 40, fontWeight: 900, color: "var(--orange)" }}>{goodput}</div>
+          <div style={{ fontSize: 40, fontWeight: 900, color: "var(--orange)" }}>{dispGoodput}</div>
           <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 16 }}>req/s within SLA</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
@@ -214,18 +301,24 @@ export default function WorkerPage() {
             </div>
             <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
               <span style={{ color: "var(--text-secondary)" }}>Role</span>
-              <span style={{ fontWeight: 700 }}>Prefill</span>
+              <span style={{ fontWeight: 700 }}>{dispRole}</span>
             </div>
+            {workerData?.tee_capable && (
+              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
+                <span style={{ color: "var(--text-secondary)" }}>TEE</span>
+                <span style={{ fontWeight: 700, color: "var(--purple)" }}>CAPABLE</span>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Reliability */}
         <div className="card">
           <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 14 }}>RELIABILITY</div>
-          <div style={{ fontSize: 40, fontWeight: 900, color: "var(--green)" }}>{reliabilityScore.toLocaleString()}</div>
+          <div style={{ fontSize: 40, fontWeight: 900, color: "var(--green)" }}>{dispReliability.toLocaleString()}</div>
           <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14 }}>/10000</div>
           <div className="progress-track" style={{ marginBottom: 10 }}>
-            <div className="progress-fill" style={{ width: `${(reliabilityScore / 10000) * 100}%`, background: "var(--green)" }} />
+            <div className="progress-fill" style={{ width: `${(dispReliability / 10000) * 100}%`, background: "var(--green)" }} />
           </div>
           <div style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.6 }}>
             Next tier at <span style={{ color: "var(--orange)", fontWeight: 700 }}>9,500</span> — unlocks Realtime jobs
@@ -237,7 +330,7 @@ export default function WorkerPage() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 14 }}>
         <div className="card">
           <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 14 }}>STAKED LOCK</div>
-          <div style={{ fontSize: 28, fontWeight: 900, marginBottom: 4 }}>{stakedLock.toLocaleString()}</div>
+          <div style={{ fontSize: 28, fontWeight: 900, marginBottom: 4 }}>{dispStake.toLocaleString()}</div>
           <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14 }}>LOCK</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
             <div style={{ background: "var(--bg-3)", borderRadius: 6, padding: "10px" }}>
@@ -250,12 +343,19 @@ export default function WorkerPage() {
             </div>
           </div>
           <div style={{ fontSize: 11, color: "var(--green)", background: "rgba(34,204,102,0.06)", borderRadius: 5, padding: "8px" }}>
-            8% APY · ~{(stakedLock * 0.08 / 365).toFixed(2)} LOCK/day
+            8% APY · ~{(dispStake * 0.08 / 365).toFixed(2)} LOCK/day
           </div>
         </div>
 
         <div className="card">
-          <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 14 }}>RECENT JOBS</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
+            <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px" }}>RECENT JOBS</div>
+            {workerData && (
+              <span style={{ fontSize: 10, color: "var(--green)", fontWeight: 700, background: "rgba(34,204,102,0.08)", borderRadius: 4, padding: "2px 8px" }}>
+                LIVE
+              </span>
+            )}
+          </div>
           <div style={{ overflowX: "auto" }}>
             <table className="data-table">
               <thead>
@@ -264,7 +364,23 @@ export default function WorkerPage() {
                 </tr>
               </thead>
               <tbody>
-                {jobs.map((j) => (
+                {apiJobs ? apiJobs.map((j) => (
+                  <tr key={j.id}>
+                    <td style={{ fontFamily: "monospace", color: "var(--text-muted)", fontSize: 11 }}>{j.id.slice(0, 10)}</td>
+                    <td style={{ color: "var(--text-secondary)", fontSize: 11 }}>{j.model.split("-").slice(0, 2).join("-")}</td>
+                    <td>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: j.sla_tier === "realtime" ? "var(--orange)" : j.sla_tier === "confidential" ? "var(--purple)" : "var(--text-muted)" }}>
+                        {j.sla_tier.toUpperCase()}
+                      </span>
+                    </td>
+                    <td style={{ color: j.ttft_ms > 300 ? "var(--red)" : "var(--text-primary)", fontWeight: 700 }}>{j.ttft_ms}ms</td>
+                    <td style={{ color: "var(--text-secondary)" }}>{j.tpot_ms}ms</td>
+                    <td><span style={{ fontWeight: 800, fontSize: 11, color: j.sla_met ? "var(--green)" : "var(--red)" }}>{j.sla_met ? "MET" : "MISS"}</span></td>
+                    <td style={{ color: "var(--red)", fontSize: 11 }}>
+                      {j.penalty_paid ? `-${j.penalty_paid} LOCK` : <span style={{ color: "var(--text-muted)" }}>—</span>}
+                    </td>
+                  </tr>
+                )) : mockJobs.map((j) => (
                   <tr key={j.id}>
                     <td style={{ fontFamily: "monospace", color: "var(--text-muted)", fontSize: 11 }}>{j.id.slice(0, 10)}</td>
                     <td style={{ color: "var(--text-secondary)", fontSize: 11 }}>{j.model.split("-").slice(0, 2).join("-")}</td>

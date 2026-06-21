@@ -13,7 +13,7 @@ import {
   type ChatGridlockMeta,
 } from "@/lib/api-client";
 
-type Tab = "playground" | "overview" | "monitor" | "penalties" | "keys" | "billing";
+type Tab = "playground" | "overview" | "monitor" | "penalties" | "keys" | "billing" | "privacy";
 
 const MODELS = [
   { value: "llama-3.1-8b-instant",     label: "LLaMA 3.1 8B  (fast)" },
@@ -174,6 +174,7 @@ export default function ConsolePage() {
           ["penalties",  "Penalties"],
           ["keys",       "API Keys"],
           ["billing",    "Billing"],
+          ["privacy",    "Privacy"],
         ] as [Tab, string][]).map(([t, l]) => (
           <button key={t} onClick={() => setTab(t)} className={`tab-btn${tab === t ? " active" : ""}`}>{l}</button>
         ))}
@@ -577,6 +578,104 @@ export default function ConsolePage() {
           </div>
         </div>
       )}
+
+      {/* ── PRIVACY ──────────────────────────────────────────────────────────── */}
+      {tab === "privacy" && (() => {
+        const [teeOnly, setTeeOnly] = [playPrivacy, setPlayPrivacy];
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            {/* TEE header */}
+            <div className="card card-orange">
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <div>
+                  <div style={{ fontSize: 10, color: "var(--orange)", fontWeight: 700, letterSpacing: "1px", marginBottom: 6 }}>CONFIDENTIAL COMPUTING</div>
+                  <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 4 }}>Privacy-Preserving Inference</div>
+                  <div style={{ fontSize: 13, color: "var(--text-muted)", maxWidth: 480, lineHeight: 1.6 }}>
+                    Route all requests to TEE-capable workers (NVIDIA CC / AMD SEV). Your prompts are encrypted in hardware — the worker operator cannot read them.
+                  </div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+                  <div className={`toggle${teeOnly ? " on" : ""}`}
+                    style={{ transform: "scale(1.4)", background: teeOnly ? "var(--purple)" : undefined, borderColor: teeOnly ? "var(--purple)" : undefined }}
+                    onClick={() => setTeeOnly((p: boolean) => !p)}>
+                    <div className="toggle-thumb" />
+                  </div>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: teeOnly ? "var(--purple)" : "var(--text-muted)" }}>
+                    {teeOnly ? "ENABLED" : "DISABLED"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* How TEE works */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
+              {[
+                { n: "01", title: "Hardware Enclave",  desc: "NVIDIA H100 Confidential Computing or AMD SEV-SNP isolates the inference process. Even the GPU owner cannot read the memory." },
+                { n: "02", title: "Attestation Hash",  desc: "Every confidential job produces a signed attestation hash proving execution happened inside a TEE. Stored on-chain in the SLARegistry." },
+                { n: "03", title: "Slash on Failure",  desc: "Workers who fail TEE attestation face an additional reputation slash on top of the standard SLA penalty." },
+              ].map((c) => (
+                <div key={c.n} className="card" style={{ borderColor: teeOnly ? "rgba(180,100,255,0.2)" : undefined }}>
+                  <div style={{ fontSize: 10, fontWeight: 900, color: "var(--purple)", marginBottom: 6 }}>{c.n}</div>
+                  <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13 }}>{c.title}</div>
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6 }}>{c.desc}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* TEE worker pool stats */}
+            <div className="card">
+              <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 14 }}>TEE WORKER POOL</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+                {[
+                  { label: "TEE WORKERS",      value: realStats ? realStats.tee_workers.toString()         : "—", accent: "var(--purple)" },
+                  { label: "CONFIDENTIAL SHARE", value: realStats ? `${realStats.confidential_share}%`    : "—", accent: "var(--purple)" },
+                  { label: "SLA TARGET",         value: "< 800ms + proof",                                  accent: "var(--text-secondary)" },
+                  { label: "PENALTY",            value: "1× fee + slash",                                   accent: "var(--red)" },
+                ].map((s) => (
+                  <div key={s.label} style={{ background: "var(--bg-3)", borderRadius: 6, padding: "14px" }}>
+                    <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 8 }}>{s.label}</div>
+                    <div style={{ fontSize: 18, fontWeight: 900, color: s.accent }}>{s.value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Supported hardware */}
+            <div className="card">
+              <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 14 }}>SUPPORTED HARDWARE</div>
+              <table className="data-table">
+                <thead><tr>{["GPU", "TEE Mode", "Memory", "Status"].map((h) => <th key={h}>{h}</th>)}</tr></thead>
+                <tbody>
+                  {[
+                    ["NVIDIA H100 SXM", "Confidential Computing (CC)",    "80GB HBM3",  "Supported"],
+                    ["NVIDIA H100 NVL", "Confidential Computing (CC)",    "94GB HBM3",  "Supported"],
+                    ["NVIDIA H200",     "Confidential Computing (CC)",    "141GB HBM3e", "Supported"],
+                    ["AMD MI300X",      "SEV-SNP",                        "192GB HBM3",  "Coming Q3 2025"],
+                    ["NVIDIA A100",     "Not supported",                  "80GB HBM2e",  "Not available"],
+                  ].map(([gpu, mode, mem, status]) => (
+                    <tr key={gpu}>
+                      <td style={{ fontWeight: 700, color: "var(--text-secondary)" }}>{gpu}</td>
+                      <td style={{ color: status === "Supported" ? "var(--purple)" : "var(--text-muted)", fontSize: 12 }}>{mode}</td>
+                      <td style={{ color: "var(--text-muted)", fontSize: 11 }}>{mem}</td>
+                      <td>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: status === "Supported" ? "var(--green)" : status.startsWith("Coming") ? "var(--yellow)" : "var(--text-muted)" }}>
+                          {status.toUpperCase()}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {teeOnly && (
+              <div style={{ background: "rgba(180,100,255,0.06)", border: "1px solid rgba(180,100,255,0.2)", borderRadius: 8, padding: "14px 18px", fontSize: 13, color: "var(--purple)", lineHeight: 1.6 }}>
+                <strong>TEE mode is active.</strong> All requests in the Playground tab will be routed to Confidential-tier workers with attestation hashes included in every response.
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── BILLING ──────────────────────────────────────────────────────────── */}
       {tab === "billing" && (() => {

@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { generateWorkers, getNetworkStats, generateJobs, type Worker, type Job, type WorkerRole, type WorkerStatus } from "@/lib/mock-data";
-import { fetchNetworkStats, fetchWorkers, fetchJobs, type ApiWorker, type ApiJob, type ApiNetworkStats } from "@/lib/api-client";
+import { fetchNetworkStats, fetchWorkers, fetchJobs, fetchCacheStats, fetchPdStats, type ApiWorker, type ApiJob, type ApiNetworkStats, type ApiCacheStats, type ApiPdStats } from "@/lib/api-client";
 
 function adaptWorker(w: ApiWorker): Worker {
   return {
@@ -74,6 +74,8 @@ export default function ExplorerPage() {
   const [search, setSearch] = useState("");
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
   const [jobSearch, setJobSearch] = useState("");
+  const [cacheStats, setCacheStats] = useState<ApiCacheStats | null>(null);
+  const [pdStats, setPdStats]       = useState<ApiPdStats | null>(null);
 
   useEffect(() => {
     // Try real API first, fall back to mock
@@ -89,8 +91,13 @@ export default function ExplorerPage() {
       .then((s) => setStats(adaptStats(s)))
       .catch(() => setStats(getNetworkStats()));
 
+    fetchCacheStats().then(setCacheStats).catch(() => {});
+    fetchPdStats().then(setPdStats).catch(() => {});
+
     const id = setInterval(() => {
       fetchNetworkStats().then((s) => setStats(adaptStats(s))).catch(() => {});
+      fetchCacheStats().then(setCacheStats).catch(() => {});
+      fetchPdStats().then(setPdStats).catch(() => {});
     }, 3000);
     return () => clearInterval(id);
   }, []);
@@ -134,6 +141,56 @@ export default function ExplorerPage() {
               </div>
             ))}
           </div>
+
+          {/* Cache + P/D breakdown */}
+          {(cacheStats || pdStats) && (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+              {cacheStats && (
+                <div className="card">
+                  <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 14 }}>KV-CACHE STATS</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 14 }}>
+                    {[
+                      { label: "HIT RATE", value: `${(cacheStats.hit_rate * 100).toFixed(1)}%`, color: cacheStats.hit_rate > 0.5 ? "var(--green)" : "var(--yellow)" },
+                      { label: "HITS",     value: cacheStats.hits.toLocaleString(),               color: "var(--text-primary)" },
+                      { label: "MISSES",   value: cacheStats.misses.toLocaleString(),             color: "var(--text-secondary)" },
+                    ].map((s) => (
+                      <div key={s.label} style={{ background: "var(--bg-3)", borderRadius: 6, padding: 10 }}>
+                        <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, marginBottom: 6 }}>{s.label}</div>
+                        <div style={{ fontSize: 18, fontWeight: 900, color: s.color }}>{s.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="progress-track">
+                    <div className="progress-fill" style={{ width: `${cacheStats.hit_rate * 100}%`, background: "var(--green)" }} />
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>
+                    {cacheStats.entries.toLocaleString()} entries cached · strategy: {cacheStats.strategy}
+                  </div>
+                </div>
+              )}
+              {pdStats && (
+                <div className="card">
+                  <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 14 }}>PREFILL / DECODE POOL</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10, marginBottom: 14 }}>
+                    {[
+                      { label: "PREFILL",  value: pdStats.prefill_workers, color: "var(--green)" },
+                      { label: "DECODE",   value: pdStats.decode_workers,  color: "var(--orange)" },
+                      { label: "CACHE",    value: pdStats.cache_workers,   color: "var(--purple)" },
+                      { label: "ROUTER",   value: pdStats.router_workers,  color: "var(--text-secondary)" },
+                    ].map((s) => (
+                      <div key={s.label} style={{ background: "var(--bg-3)", borderRadius: 6, padding: 10 }}>
+                        <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, marginBottom: 6 }}>{s.label}</div>
+                        <div style={{ fontSize: 22, fontWeight: 900, color: s.color }}>{s.value}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                    Warm cache rate: <span style={{ color: "var(--green)", fontWeight: 700 }}>{(pdStats.warm_cache_rate * 100).toFixed(1)}%</span> of P/D pairs
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
             <div className="card">
