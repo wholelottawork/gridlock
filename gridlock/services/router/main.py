@@ -24,9 +24,9 @@ from typing import Any
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 load_dotenv()
@@ -40,6 +40,21 @@ app.add_middleware(
 )
 
 # ---------------------------------------------------------------------------
+# API key auth — set API_KEYS env var to enable (empty = dev mode, open)
+# ---------------------------------------------------------------------------
+_API_KEYS: set[str] = set()  # populated after env load below
+_OPEN_PATHS = {"/health", "/v1/live", "/docs", "/openapi.json", "/redoc"}
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    if not _API_KEYS or request.url.path in _OPEN_PATHS:
+        return await call_next(request)
+    key = request.headers.get("Authorization", "").replace("Bearer ", "").strip()
+    if key not in _API_KEYS:
+        return JSONResponse({"error": "Invalid or missing API key"}, status_code=401)
+    return await call_next(request)
+
+# ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
 VLLM_ENDPOINT       = os.getenv("VLLM_ENDPOINT",       "http://localhost:8000")
@@ -49,6 +64,9 @@ ROUTER_KEYPAIR_PATH = os.getenv("ROUTER_KEYPAIR_PATH",  "~/.config/solana/id.jso
 SUPABASE_URL        = os.getenv("SUPABASE_URL",         "")
 SUPABASE_KEY        = os.getenv("SUPABASE_KEY",         "")
 WATCHER_SAMPLE_RATE = float(os.getenv("WATCHER_SAMPLE_RATE", "0.05"))
+
+# Populate auth set from env (empty string or unset = auth disabled)
+_API_KEYS = set(k.strip() for k in os.getenv("API_KEYS", "").split(",") if k.strip())
 
 PROGRAM_PROVIDER_REGISTRY = "FtcDkiVRPSjubZwNktwV1wNw8jvgvGHXHhYsTbvAf6T2"
 PROGRAM_JOB_SCHEDULER     = "9FpypwgXqgNGsXrgTtzZ4G62tYB5vH8FZKBHzt3sCAJG"
