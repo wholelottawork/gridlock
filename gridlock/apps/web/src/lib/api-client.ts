@@ -1,7 +1,7 @@
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, { next: { revalidate: 0 } });
+  const res = await fetch(`${BASE_URL}${path}`, { cache: "no-store" });
   if (!res.ok) throw new Error(`API ${path}: ${res.status}`);
   return res.json() as Promise<T>;
 }
@@ -16,32 +16,46 @@ async function post<T>(path: string, body: unknown): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+// ─── Types matching the actual backend ───────────────────────────────────────
+
 export interface ApiJob {
-  job_id: string;
-  worker_address: string;
+  id: string;
+  customer: string;
   model: string;
   sla_tier: "realtime" | "standard" | "batch" | "confidential";
   ttft_ms: number;
   tpot_ms: number;
   sla_met: boolean;
   confidential: boolean;
-  penalty_paid?: number;
+  worker: string;
+  worker_address: string;
   ts: number;
+  penalty_paid?: number | null;
+  fee: number;
+  status: string;
+  attestation_hash?: string | null;
 }
 
 export interface ApiWorker {
   address: string;
-  alias: string;
-  region: string;
+  role: string;
+  endpoint: string;
+  sla_tiers: string[];
   tee_capable: boolean;
-  status: "active" | "idle" | "offline";
-  goodput: number;
-  reliability: number;
-  total_jobs: number;
+  reliability_score: number;
+  goodput_score: number;
+  sla_pass_rate: number;
+  p99_ttft_ms: number;
+  status: string;
   staked_lock: number;
-  earned_lock: number;
-  gpu_model: string;
-  uptime: number;
+  hardware_tier: string;
+  jobs_today: number;
+  earnings_today: number;
+  penalties_paid: number;
+  is_confidential: boolean;
+  last_heartbeat: number;
+  registered_at: number;
+  grid_points?: number;
 }
 
 export interface ApiNetworkStats {
@@ -55,16 +69,49 @@ export interface ApiNetworkStats {
   total_penalties_lock: number;
   confidential_share: number;
   lock_burned: number;
+  total_workers: number;
+  requests_today: number;
+  cache_hit_entries: number;
 }
 
-export interface ApiLeaderEntry {
-  address: string;
-  alias: string;
-  score: number;
-  rank: number;
-  tee_capable: boolean;
-  sla_pass_rate: number;
-  total_jobs: number;
+export interface ChatGridlockMeta {
+  job_id: string;
+  ttft_ms: number;
+  tpot_ms: number;
+  sla_tier: string;
+  sla_met: boolean;
+  sla_target_ttft_ms: number;
+  worker: string;
+  confidential: boolean;
+  penalty_due_lock?: number | null;
+  fee_lock: number;
+  attestation_hash?: string | null;
+}
+
+// ─── Chat ────────────────────────────────────────────────────────────────────
+
+export async function chatCompletion(opts: {
+  model: string;
+  messages: { role: string; content: string }[];
+  sla?: string;
+  privacy?: boolean;
+}): Promise<{ content: string; meta: ChatGridlockMeta }> {
+  const res = await fetch(`${BASE_URL}/v1/chat/completions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: opts.model,
+      messages: opts.messages,
+      stream: false,
+      gridlock: { sla: opts.sla ?? "standard", privacy: opts.privacy ?? false },
+    }),
+  });
+  if (!res.ok) throw new Error(`Chat API: ${res.status}`);
+  const data = await res.json();
+  return {
+    content: data.choices[0].message.content as string,
+    meta: data.gridlock as ChatGridlockMeta,
+  };
 }
 
 // ─── Network Stats ────────────────────────────────────────────────────────────
@@ -101,41 +148,55 @@ export async function fetchWorkers(params?: {
   status?: string;
   tee_capable?: boolean;
   limit?: number;
-}): Promise<ApiWorker[]> {
+}): Promise<{ workers: ApiWorker[]; total: number }> {
   const qs = new URLSearchParams();
-  if (params?.status)               qs.set("status",      params.status);
+  if (params?.status)                    qs.set("status",      params.status);
   if (params?.tee_capable !== undefined) qs.set("tee_capable", String(params.tee_capable));
-  if (params?.limit)                qs.set("limit",       String(params.limit));
-  return get<ApiWorker[]>(`/v1/workers?${qs}`);
+  if (params?.limit)                     qs.set("limit",       String(params.limit));
+  return get<{ workers: ApiWorker[]; total: number }>(`/v1/workers?${qs}`);
 }
 
-export async function fetchWorker(address: string): Promise<ApiWorker> {
-  return get<ApiWorker>(`/v1/workers/${address}`);
+export async function fetchWorker(address: string): Promise<ApiWorker & { recent_jobs: ApiJob[] }> {
+  return get<ApiWorker & { recent_jobs: ApiJob[] }>(`/v1/workers/${address}`);
 }
 
 export async function registerWorker(body: {
-  address: string;
-  alias: string;
-  region: string;
+  operator_pubkey: string;
+  role: string;
+  hardware_tier: string;
   tee_capable: boolean;
-  gpu_model: string;
-}): Promise<{ success: boolean; tx?: string }> {
+  endpoint?: string;
+}): Promise<{ success: boolean; address: string; tx_sig?: string }> {
   return post("/v1/workers/register", body);
 }
 
-export async function heartbeat(address: string): Promise<{ ok: boolean }> {
-  return post("/v1/workers/heartbeat", { address });
+export async function heartbeat(address: string, goodput_score?: number): Promise<{ ok: boolean }> {
+  return post("/v1/workers/heartbeat", { worker_address: address, goodput_score });
 }
 
 // ─── Leaderboard ─────────────────────────────────────────────────────────────
 
-export async function fetchLeaderboard(metric: "goodput" | "reliability" | "confidential" | "earnings", limit = 25): Promise<ApiLeaderEntry[]> {
-  return get<ApiLeaderEntry[]>(`/v1/leaderboard?metric=${metric}&limit=${limit}`);
+export async function fetchLeaderboard(
+  metric: "goodput" | "reliability" | "confidential" | "earnings",
+  limit = 25,
+): Promise<{ metric: string; ranked: ApiWorker[]; total: number }> {
+  return get<{ metric: string; ranked: ApiWorker[]; total: number }>(
+    `/v1/leaderboard?metric=${metric}&limit=${limit}`,
+  );
 }
 
 // ─── Health ───────────────────────────────────────────────────────────────────
 
-export async function fetchHealth(): Promise<{ status: string; solana_slot: number; programs: Record<string, string> }> {
+export async function fetchHealth(): Promise<{
+  status: string;
+  solana_slot: number;
+  active_workers: number;
+  total_workers: number;
+  jobs_tracked: number;
+  redis: string;
+  supabase: string;
+  programs: Record<string, string>;
+}> {
   return get("/health");
 }
 

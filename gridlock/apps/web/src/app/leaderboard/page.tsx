@@ -1,7 +1,29 @@
 "use client";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { generateWorkers, type Worker } from "@/lib/mock-data";
+import { generateWorkers, type Worker, type WorkerRole, type WorkerStatus } from "@/lib/mock-data";
+import { fetchLeaderboard, type ApiWorker } from "@/lib/api-client";
+
+function adaptWorker(w: ApiWorker): Worker & { grid_points: number } {
+  return {
+    id: w.address,
+    address: w.address,
+    role: w.role as WorkerRole,
+    status: w.status as WorkerStatus,
+    reliabilityScore: w.reliability_score,
+    slaPassRate: Math.round(w.sla_pass_rate * 100),
+    p99TtftMs: w.p99_ttft_ms,
+    goodputScore: w.goodput_score,
+    stakedLock: w.staked_lock,
+    teeCapable: w.tee_capable,
+    penaltiesPaid: w.penalties_paid,
+    hardwareTier: w.hardware_tier,
+    jobsToday: w.jobs_today,
+    earningsToday: w.earnings_today,
+    isConfidential: w.is_confidential,
+    grid_points: w.grid_points ?? 0,
+  };
+}
 
 type BoardTab = "goodput" | "reliability" | "confidential";
 
@@ -31,14 +53,22 @@ export default function LeaderboardPage() {
   const [season] = useState({ number: 1, endsIn: "14d 7h", totalPoints: 4812900 });
 
   useEffect(() => {
-    setWorkers(generateWorkers(50));
-  }, []);
+    const metric = tab === "goodput" ? "goodput" : tab === "reliability" ? "reliability" : "confidential";
+    fetchLeaderboard(metric, 25)
+      .then((r) => setWorkers(r.ranked.map(adaptWorker)))
+      .catch(() => {
+        const mock = generateWorkers(50);
+        const sorted = [...mock].sort((a, b) => {
+          if (tab === "goodput") return b.goodputScore - a.goodputScore;
+          if (tab === "reliability") return b.reliabilityScore - a.reliabilityScore;
+          return (b.isConfidential ? 1 : 0) - (a.isConfidential ? 1 : 0) || b.goodputScore - a.goodputScore;
+        });
+        setWorkers(sorted.map((w) => ({ ...w, grid_points: 0 })));
+      });
+  }, [tab]);
 
-  const ranked = [...workers].sort((a, b) => {
-    if (tab === "goodput") return b.goodputScore - a.goodputScore;
-    if (tab === "reliability") return b.reliabilityScore - a.reliabilityScore;
-    return (b.isConfidential ? 1 : 0) - (a.isConfidential ? 1 : 0) || b.goodputScore - a.goodputScore;
-  });
+  // Already sorted by the API; no client-side re-sort needed
+  const ranked = workers as (Worker & { grid_points: number })[];
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }}
@@ -101,7 +131,7 @@ export default function LeaderboardPage() {
             <tbody>
               {ranked.slice(0, 25).map((w, i) => {
                 const rank = i + 1;
-                const pts = pointsForRank(rank, w, tab);
+                const pts = (w as Worker & { grid_points: number }).grid_points || pointsForRank(rank, w, tab);
                 const roleColors: Record<string, string> = { Prefill: "var(--green)", Decode: "var(--orange)", Cache: "var(--purple)", Router: "var(--text-secondary)" };
                 return (
                   <motion.tr key={w.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }}

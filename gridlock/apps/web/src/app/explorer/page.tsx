@@ -1,7 +1,56 @@
 "use client";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { generateWorkers, getNetworkStats, generateJobs, type Worker, type Job } from "@/lib/mock-data";
+import { generateWorkers, getNetworkStats, generateJobs, type Worker, type Job, type WorkerRole, type WorkerStatus } from "@/lib/mock-data";
+import { fetchNetworkStats, fetchWorkers, fetchJobs, type ApiWorker, type ApiJob, type ApiNetworkStats } from "@/lib/api-client";
+
+function adaptWorker(w: ApiWorker): Worker {
+  return {
+    id: w.address,
+    address: w.address,
+    role: w.role as WorkerRole,
+    status: w.status as WorkerStatus,
+    reliabilityScore: w.reliability_score,
+    slaPassRate: Math.round(w.sla_pass_rate * 100),
+    p99TtftMs: w.p99_ttft_ms,
+    goodputScore: w.goodput_score,
+    stakedLock: w.staked_lock,
+    teeCapable: w.tee_capable,
+    penaltiesPaid: w.penalties_paid,
+    hardwareTier: w.hardware_tier,
+    jobsToday: w.jobs_today,
+    earningsToday: w.earnings_today,
+    isConfidential: w.is_confidential,
+  };
+}
+
+function adaptStats(s: ApiNetworkStats): ReturnType<typeof getNetworkStats> {
+  return {
+    activeworkers: s.active_workers,
+    slaPassRate: s.sla_pass_rate,
+    p99TtftMs: s.p99_ttft_ms,
+    totalPenaltiesPaid: s.total_penalties_lock,
+    requestsToday: s.requests_today,
+    confidentialShare: s.confidential_share,
+    teeWorkers: s.tee_workers,
+  };
+}
+
+function adaptJob(j: ApiJob): Job {
+  return {
+    id: j.id,
+    customer: j.customer,
+    model: j.model,
+    slaTier: j.sla_tier,
+    ttftMs: j.ttft_ms,
+    tpotMs: j.tpot_ms,
+    slaMet: j.sla_met,
+    confidential: j.confidential,
+    worker: j.worker,
+    ts: j.ts * 1000,
+    penaltyPaid: j.penalty_paid ?? undefined,
+  };
+}
 
 type ExplorerTab = "network" | "workers" | "receipts";
 
@@ -27,9 +76,22 @@ export default function ExplorerPage() {
   const [jobSearch, setJobSearch] = useState("");
 
   useEffect(() => {
-    setWorkers(generateWorkers(30));
-    setJobs(generateJobs(40));
-    const id = setInterval(() => setStats(getNetworkStats()), 3000);
+    // Try real API first, fall back to mock
+    fetchWorkers({ limit: 50 })
+      .then((r) => setWorkers(r.workers.map(adaptWorker)))
+      .catch(() => setWorkers(generateWorkers(30)));
+
+    fetchJobs({ limit: 40 })
+      .then((r) => setJobs(r.jobs.map(adaptJob)))
+      .catch(() => setJobs(generateJobs(40)));
+
+    fetchNetworkStats()
+      .then((s) => setStats(adaptStats(s)))
+      .catch(() => setStats(getNetworkStats()));
+
+    const id = setInterval(() => {
+      fetchNetworkStats().then((s) => setStats(adaptStats(s))).catch(() => {});
+    }, 3000);
     return () => clearInterval(id);
   }, []);
 
