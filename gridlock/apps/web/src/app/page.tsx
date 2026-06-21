@@ -234,24 +234,24 @@ export default function LandingPage() {
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 48 }}>
             {[
               {
-                icon: "🖥️",
+                icon: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/></svg>,
                 title: "Anyone can be a worker",
                 body: "Have a gaming PC with a strong GPU? You can earn money by running AI on it. You install software, register on Gridlock, and your computer starts processing AI requests from people around the world.",
               },
               {
-                icon: "⚡",
+                icon: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
                 title: "Speed is guaranteed by code",
                 body: "When you request AI, you pick a speed tier. The worker's LOCK tokens are locked as collateral. If the AI is too slow, the blockchain automatically moves tokens from the worker's wallet to yours. No humans involved.",
               },
               {
-                icon: "🔒",
+                icon: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
                 title: "No one controls it",
                 body: "Everything runs on Solana — a public blockchain. There is no company in the middle that can raise prices, cut you off, or disappear. The rules are written in code that anyone can read.",
               },
             ].map((c) => (
               <motion.div key={c.title} initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.45 }}
                 style={{ background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 10, padding: "28px" }}>
-                <div style={{ fontSize: 28, marginBottom: 14 }}>{c.icon}</div>
+                <div style={{ marginBottom: 16, color: "var(--text-primary)" }}>{c.icon}</div>
                 <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 10 }}>{c.title}</div>
                 <div style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.8 }}>{c.body}</div>
               </motion.div>
@@ -464,13 +464,13 @@ export default function LandingPage() {
                     <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 20 }}>HOW WORKERS EARN</div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                       {[
-                        { icon: "⚡", title: "Per-request fees",      desc: "Customers pay in LOCK for every completed request. Higher SLA tiers pay more. Hit your target time and you keep 20% of the network fee." },
-                        { icon: "🎯", title: "Reliability bonus",     desc: "Your reliability score (0–10,000) determines job priority. Score above 9,500 unlocks Realtime tier — the highest-paying tier." },
-                        { icon: "📈", title: "Staking multiplier",    desc: "Stake 15K+ LOCK → 2× earnings multiplier. Stake 50K+ LOCK → 3× multiplier. Your stake also earns 8% APY on its own." },
-                        { icon: "🔒", title: "Confidential premium",  desc: "H100 workers with TEE mode enabled earn a premium on top of standard fees for encrypting prompts inside the secure hardware enclave." },
+                        { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>, title: "Per-request fees",      desc: "Customers pay in LOCK for every completed request. Higher SLA tiers pay more. Hit your target time and you keep 20% of the network fee." },
+                        { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>, title: "Reliability bonus",     desc: "Your reliability score (0–10,000) determines job priority. Score above 9,500 unlocks Realtime tier — the highest-paying tier." },
+                        { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>, title: "Staking multiplier",    desc: "Stake 15K+ LOCK → 2× earnings multiplier. Stake 50K+ LOCK → 3× multiplier. Your stake also earns 8% APY on its own." },
+                        { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>, title: "Confidential premium",  desc: "H100 workers with TEE mode enabled earn a premium on top of standard fees for encrypting prompts inside the secure hardware enclave." },
                       ].map((item) => (
                         <div key={item.title} style={{ display: "flex", gap: 14, padding: "16px", background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 8 }}>
-                          <div style={{ fontSize: 22, flexShrink: 0 }}>{item.icon}</div>
+                          <div style={{ flexShrink: 0, color: "var(--text-primary)", marginTop: 2 }}>{item.icon}</div>
                           <div>
                             <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>{item.title}</div>
                             <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.7 }}>{item.desc}</div>
