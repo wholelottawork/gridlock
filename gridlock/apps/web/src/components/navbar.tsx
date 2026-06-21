@@ -20,15 +20,24 @@ const WALLET_ICONS: Record<string, string> = {
 
 export function Navbar() {
   const path = usePathname();
-  const { connected, connecting, publicKey, select, wallets, disconnect } = useWallet();
+  const { wallet, connected, connecting, publicKey, select, connect, disconnect, wallets } = useWallet();
   const [open, setOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const shouldConnect = useRef(false);
 
-  const shortAddr = publicKey
-    ? `${publicKey.toBase58().slice(0, 4)}…${publicKey.toBase58().slice(-4)}`
-    : null;
+  // Hydration fix: wallet state is browser-only, render neutral until mounted
+  useEffect(() => { setMounted(true); }, []);
 
-  // close dropdown when clicking outside
+  // After select() updates the wallet, call connect() to open the wallet popup
+  useEffect(() => {
+    if (shouldConnect.current && wallet && !connected && !connecting) {
+      shouldConnect.current = false;
+      connect().catch(() => {});
+    }
+  }, [wallet, connected, connecting, connect]);
+
+  // Close dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
@@ -39,9 +48,23 @@ export function Navbar() {
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
-  const availableWallets = wallets.filter(
-    (w) => w.readyState === "Installed" || w.readyState === "Loadable"
-  );
+  function handleSelectWallet(name: string) {
+    shouldConnect.current = true;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    select(name as any);
+    setOpen(false);
+  }
+
+  const shortAddr = publicKey
+    ? `${publicKey.toBase58().slice(0, 4)}…${publicKey.toBase58().slice(-4)}`
+    : null;
+
+  const availableWallets = mounted
+    ? wallets.filter((w) => w.readyState === "Installed" || w.readyState === "Loadable")
+    : [];
+
+  const isConnected  = mounted && connected;
+  const isConnecting = mounted && connecting;
 
   return (
     <nav style={{
@@ -97,48 +120,41 @@ export function Navbar() {
           <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 600 }}>DEVNET</span>
         </div>
 
-        {/* Wallet button */}
+        {/* Wallet button — always renders CONNECT on server (no wallet state), wallet UI after mount */}
         <div ref={menuRef} style={{ position: "relative", flexShrink: 0 }}>
           <button
             onClick={() => setOpen((v) => !v)}
             style={{
-              background: connected ? "var(--orange-dim)" : "transparent",
-              border: `1px solid ${connected ? "var(--orange)" : "var(--orange-border)"}`,
+              background: isConnected ? "var(--orange-dim)" : "transparent",
+              border: `1px solid ${isConnected ? "var(--orange)" : "var(--orange-border)"}`,
               borderRadius: 6, padding: "6px 16px", fontSize: 12, fontWeight: 700,
               cursor: "pointer", color: "var(--orange)", letterSpacing: "0.5px",
               transition: "all 0.15s", display: "flex", alignItems: "center", gap: 6,
             }}
           >
-            {connected ? (
+            {isConnected ? (
               <>
-                <span style={{
-                  width: 6, height: 6, borderRadius: "50%", background: "var(--green)",
-                  display: "inline-block", flexShrink: 0,
-                }} />
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--green)", display: "inline-block", flexShrink: 0 }} />
                 {shortAddr}
                 <span style={{ opacity: 0.5, fontSize: 9 }}>▾</span>
               </>
-            ) : connecting ? (
-              "Connecting…"
-            ) : (
-              "+ CONNECT"
-            )}
+            ) : isConnecting ? "Connecting…" : "+ CONNECT"}
           </button>
 
           {open && (
             <div style={{
               position: "absolute", right: 0, top: "calc(100% + 8px)",
               background: "var(--bg-2)", border: "1px solid var(--border)",
-              borderRadius: 8, minWidth: 200, padding: 6, zIndex: 100,
+              borderRadius: 8, minWidth: 210, padding: 6, zIndex: 100,
               boxShadow: "0 8px 32px rgba(0,0,0,0.6)",
             }}>
-              {connected ? (
+              {isConnected ? (
                 <>
                   <div style={{ padding: "8px 12px 4px", fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px" }}>
                     CONNECTED
                   </div>
-                  <div style={{ padding: "6px 12px 10px", fontFamily: "monospace", fontSize: 11, color: "var(--text-secondary)", wordBreak: "break-all" }}>
-                    {publicKey?.toBase58().slice(0, 20)}…
+                  <div style={{ padding: "4px 12px 10px", fontFamily: "monospace", fontSize: 11, color: "var(--text-secondary)", wordBreak: "break-all" }}>
+                    {publicKey?.toBase58().slice(0, 22)}…
                   </div>
                   <div style={{ height: 1, background: "var(--border)", margin: "4px 6px" }} />
                   <button
@@ -171,21 +187,23 @@ export function Navbar() {
                     availableWallets.map((w) => (
                       <button
                         key={w.adapter.name}
-                        onClick={() => { select(w.adapter.name); setOpen(false); }}
+                        onClick={() => handleSelectWallet(w.adapter.name)}
                         style={{
-                          width: "100%", textAlign: "left", padding: "8px 12px", borderRadius: 5,
+                          width: "100%", textAlign: "left", padding: "9px 12px", borderRadius: 5,
                           background: "transparent", border: "none", cursor: "pointer",
                           fontSize: 13, fontWeight: 600, color: "var(--text-primary)",
-                          display: "flex", alignItems: "center", gap: 8,
+                          display: "flex", alignItems: "center", gap: 9,
                         }}
                         onMouseEnter={e => (e.currentTarget.style.background = "var(--bg-3)")}
                         onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                       >
                         <span style={{ fontSize: 16 }}>{WALLET_ICONS[w.adapter.name] ?? "◆"}</span>
                         {w.adapter.name}
-                        <span style={{ marginLeft: "auto", fontSize: 10, color: "var(--green)", fontWeight: 700 }}>
-                          {w.readyState === "Installed" ? "INSTALLED" : ""}
-                        </span>
+                        {w.readyState === "Installed" && (
+                          <span style={{ marginLeft: "auto", fontSize: 10, color: "var(--green)", fontWeight: 700 }}>
+                            INSTALLED
+                          </span>
+                        )}
                       </button>
                     ))
                   )}
