@@ -164,7 +164,7 @@ export default function LandingPage() {
                     <h1 style={{ fontSize: 52, fontWeight: 900, lineHeight: 1.05, marginBottom: 22, letterSpacing: "-1.5px" }}>
                       AI that pays you back<br />if it&apos;s <span className="gradient-text">too slow</span>
                     </h1>
-                    <p style={{ fontSize: 16, color: "var(--text-secondary)", lineHeight: 1.8, marginBottom: 36, maxWidth: 480 }}>
+                    <p style={{ fontSize: 16, color: "var(--text-secondary)", fontWeight: 700, lineHeight: 1.8, marginBottom: 36, maxWidth: 480 }}>
                       Pick a speed tier. If the AI responds too slowly, money is automatically sent from the worker&apos;s wallet to yours — no waiting, no dispute, no customer support.
                     </p>
                     <div style={{ display: "flex", gap: 12 }}>
