@@ -28,73 +28,89 @@ export default function Earnings() {
     }).catch(() => {})
   }, [])
 
-  const todayEarn  = history[history.length - 1]?.earn ?? 0
-  const weekEarn   = history.reduce((s, d) => s + d.earn, 0)
-  const apyDaily   = (staked * 0.08) / 365
-  const maxBar     = Math.max(...history.map(d => d.earn))
+  const todayEarn = history[history.length - 1]?.earn ?? 0
+  const weekEarn  = history.reduce((s, d) => s + d.earn, 0)
+  const apyDaily  = (staked * 0.08) / 365
+  const maxBar    = Math.max(...history.map(d => d.earn))
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.25 }}>
-      <div style={{ fontSize: 19, fontWeight: 900, marginBottom: 20 }}>Earnings</div>
+      <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 20 }}>Earnings</div>
 
       {/* Top stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 20 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 20 }}>
         {[
-          { label: 'TODAY',       val: `${todayEarn.toFixed(2)} $LOCK`,   sub: 'earned' },
-          { label: 'THIS WEEK',   val: `${weekEarn.toFixed(2)} $LOCK`,    sub: 'earned' },
-          { label: 'ALL TIME',    val: `${total.toFixed(2)} $LOCK`,        sub: 'total' },
-          { label: 'STAKED',      val: `${staked.toLocaleString()} $LOCK`, sub: '8% APY' },
+          { label: 'TODAY',     val: `${todayEarn.toFixed(2)} $LOCK`,    sub: 'earned' },
+          { label: 'THIS WEEK', val: `${weekEarn.toFixed(2)} $LOCK`,     sub: 'earned' },
+          { label: 'ALL TIME',  val: `${total.toFixed(2)} $LOCK`,         sub: 'total' },
+          { label: 'STAKED',    val: `${staked.toLocaleString()} $LOCK`,  sub: '8% APY' },
         ].map(s => (
-          <div key={s.label} className="card" style={{ padding: '12px 14px' }}>
-            <div className="label" style={{ marginBottom: 8 }}>{s.label}</div>
-            <div style={{ fontSize: 16, fontWeight: 900, marginBottom: 3 }}>{s.val}</div>
-            <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>{s.sub}</div>
+          <div key={s.label} className="card" style={{ padding: '11px 13px' }}>
+            <div style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '1.2px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 7 }}>{s.label}</div>
+            <div style={{ fontSize: 15, fontWeight: 900, marginBottom: 3 }}>{s.val}</div>
+            <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)' }}>{s.sub}</div>
           </div>
         ))}
       </div>
 
-      {/* Bar chart — daily earnings */}
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div className="label" style={{ marginBottom: 14 }}>DAILY EARNINGS (LAST 7 DAYS)</div>
-        <ResponsiveContainer width="100%" height={140}>
-          <BarChart data={history} margin={{ top: 4, right: 4, left: -28, bottom: 0 }} barSize={28}>
+      {/* Bar chart */}
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '1.2px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 14 }}>DAILY EARNINGS — LAST 7 DAYS</div>
+        <ResponsiveContainer width="100%" height={130}>
+          <BarChart data={history} margin={{ top: 4, right: 4, left: -28, bottom: 0 }} barSize={26}>
             <XAxis dataKey="day" tick={{ fontSize: 10, fill: 'var(--text-muted)', fontWeight: 700 }} axisLine={false} tickLine={false} />
             <YAxis tick={{ fontSize: 9, fill: 'var(--text-muted)' }} axisLine={false} tickLine={false} />
             <Tooltip
-              contentStyle={{ background: 'var(--bg-3)', border: '1px solid var(--border)', fontSize: 11, borderRadius: 4 }}
-              formatter={(v: number) => [`${v} $LOCK`, 'Earned']}
+              cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+              content={({ active, payload }) => {
+                if (!active || !payload?.length) return null
+                const d = payload[0].payload as DayData
+                return (
+                  <div style={{
+                    background: '#111111',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    borderRadius: 6,
+                    padding: '8px 12px',
+                    minWidth: 120,
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, color: '#ffffff', marginBottom: 4 }}>{d.day}</div>
+                    <div style={{ fontSize: 13, fontWeight: 900, color: '#ffffff' }}>{d.earn} <span style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.4)' }}>$LOCK</span></div>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: 'rgba(255,255,255,0.35)', marginTop: 2 }}>{d.jobs} jobs</div>
+                  </div>
+                )
+              }}
             />
             <Bar dataKey="earn" radius={[3, 3, 0, 0]}>
               {history.map((d, i) => (
-                <Cell key={i} fill={d.earn === maxBar ? 'var(--orange)' : 'rgba(255,107,53,0.35)'} />
+                <Cell key={i} fill={d.earn === maxBar ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.18)'} />
               ))}
             </Bar>
           </BarChart>
         </ResponsiveContainer>
       </div>
 
-      {/* Staking section */}
-      <div className="card" style={{ marginBottom: 16 }}>
-        <div className="label" style={{ marginBottom: 14 }}>STAKING</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
+      {/* Staking */}
+      <div className="card" style={{ marginBottom: 14 }}>
+        <div style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '1.2px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 14 }}>STAKING</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20, marginBottom: 16 }}>
           <div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Staked balance</div>
-            <div style={{ fontSize: 22, fontWeight: 900 }}>{staked.toLocaleString()} <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--text-muted)' }}>$LOCK</span></div>
-            <div style={{ fontSize: 11, color: 'var(--text-secondary)', marginTop: 4 }}>~{apyDaily.toFixed(2)} $LOCK/day APY</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 5 }}>Staked balance</div>
+            <div style={{ fontSize: 20, fontWeight: 900 }}>{staked.toLocaleString()} <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>$LOCK</span></div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', marginTop: 3 }}>~{apyDaily.toFixed(2)} $LOCK/day APY</div>
           </div>
           <div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 6 }}>Pending unstake</div>
-            <div style={{ fontSize: 22, fontWeight: 900, color: pendingUnstake > 0 ? 'var(--yellow)' : 'var(--text-muted)' }}>
-              {pendingUnstake.toLocaleString()} <span style={{ fontSize: 13, fontWeight: 400, color: 'var(--text-muted)' }}>$LOCK</span>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 5 }}>Pending unstake</div>
+            <div style={{ fontSize: 20, fontWeight: 900, color: pendingUnstake > 0 ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+              {pendingUnstake.toLocaleString()} <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>$LOCK</span>
             </div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 4 }}>21-day cooldown</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', marginTop: 3 }}>21-day cooldown</div>
           </div>
         </div>
-        <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
-          <button style={{ flex: 1, padding: '8px 0', background: '#ffffff', color: '#000000', border: '1px solid #ffffff', borderRadius: 5, fontWeight: 800, fontSize: 12, cursor: 'pointer' }}>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button style={{ flex: 1, padding: '8px 0', background: 'var(--text-primary)', color: '#000000', border: '1px solid var(--text-primary)', borderRadius: 5, fontWeight: 800, fontSize: 12, cursor: 'pointer' }}>
             STAKE MORE
           </button>
-          <button style={{ flex: 1, padding: '8px 0', background: 'rgba(255,255,255,0.05)', color: 'var(--text-primary)', border: '1px solid var(--border-2)', borderRadius: 5, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+          <button style={{ flex: 1, padding: '8px 0', background: 'var(--accent-dim)', color: 'var(--text-primary)', border: '1px solid var(--border-2)', borderRadius: 5, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
             UNSTAKE
           </button>
         </div>
@@ -102,13 +118,13 @@ export default function Earnings() {
 
       {/* Penalty credits */}
       <div className="card">
-        <div className="label" style={{ marginBottom: 12 }}>PENALTY CREDITS RECEIVED</div>
+        <div style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '1.2px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 12 }}>PENALTY CREDITS RECEIVED</div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--orange)' }}>+3.21 $LOCK</div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 3 }}>from 4 worker penalties this week</div>
+            <div style={{ fontSize: 18, fontWeight: 900 }}>+3.21 $LOCK</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', marginTop: 3 }}>from 4 worker penalties this week</div>
           </div>
-          <div style={{ fontSize: 10, color: 'var(--text-muted)', textAlign: 'right' }}>
+          <div style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-secondary)', textAlign: 'right' }}>
             <div>Auto-credited via</div>
             <div>PermanentDelegate</div>
           </div>

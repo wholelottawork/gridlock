@@ -1,4 +1,3 @@
-"use client"
 import { useState } from 'react'
 import Sidebar from './components/Sidebar'
 import TitleBar from './components/TitleBar'
