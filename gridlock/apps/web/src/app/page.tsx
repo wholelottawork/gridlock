@@ -157,11 +157,6 @@ export default function LandingPage() {
       <section style={{ maxWidth: 1280, margin: "0 auto", padding: "52px 24px 72px" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 80, alignItems: "center" }}>
           <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}>
-            <div style={{ display: "inline-flex", alignItems: "center", gap: 8, background: "var(--orange-dim)", border: "1px solid var(--orange-border)", borderRadius: 4, padding: "4px 12px", marginBottom: 28 }}>
-              <span className="pulse" style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--orange)", display: "inline-block" }} />
-              <span style={{ fontSize: 11, color: "var(--orange)", fontWeight: 700, letterSpacing: "1px" }}>LIVE ON SOLANA — TOKEN: LOCK</span>
-            </div>
-
             <AnimatePresence mode="wait">
               <motion.div key={role} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
                 {role === "customer" ? (
