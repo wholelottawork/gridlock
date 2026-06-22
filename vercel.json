@@ -1,0 +1,6 @@
+{
+  "buildCommand": "cd gridlock/apps/web && npm install && npm run build",
+  "outputDirectory": "gridlock/apps/web/.next",
+  "framework": "nextjs",
+  "devCommand": "cd gridlock/apps/web && npm run dev"
+}
