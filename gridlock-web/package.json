@@ -1,6 +1,7 @@
 {
-  "name": "web",
+  "name": "gridlock-web",
   "version": "0.1.0",
+  "description": "Gridlock Web Dashboard",
   "private": true,
   "scripts": {
     "dev": "next dev",

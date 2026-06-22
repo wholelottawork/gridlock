@@ -1,13 +1,5 @@
 {
   "name": "gridlock",
   "private": true,
-  "workspaces": [
-    "apps/*",
-    "services/*"
-  ],
-  "scripts": {
-    "dev": "pnpm --filter web dev",
-    "build": "pnpm --filter web build",
-    "router": "cd services/router && python main.py"
-  }
+  "scripts": {}
 }

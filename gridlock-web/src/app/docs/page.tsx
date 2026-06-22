@@ -370,7 +370,7 @@ curl -X POST http://localhost:8080/v1/workers/heartbeat \\
         ▼
   ┌─────────────────────────────────────┐
   │         Gridlock Router             │
-  │  FastAPI / Python — port 8080       │
+  │  Hono / TypeScript — port 8080      │
   │                                     │
   │  1. Auth check (API key)            │
   │  2. KV-cache prefix lookup (Redis)  │

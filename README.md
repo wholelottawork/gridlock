@@ -6,7 +6,7 @@ Decentralized AI inference marketplace on Solana with enforceable latency SLAs. 
 
 Gridlock combines three layers:
 
-1. **Router (FastAPI)** — Routes inference requests to workers, measures TTFT/TPOT, manages worker registry, caches KV prefixes in Redis, and coordinates on-chain settlement.
+1. **Router (TypeScript/Hono)** — Routes inference requests to workers, measures TTFT/TPOT, manages worker registry, caches KV prefixes in Redis, and coordinates on-chain settlement.
 2. **Web app (Next.js)** — Dashboard for customers, workers, staking, governance, job explorer, and API documentation.
 3. **On-chain programs (Anchor/Rust)** — Six Solana programs handle worker registration, job escrow, SLA receipts, penalty enforcement, fee distribution, and DAO governance.
 
@@ -29,14 +29,13 @@ The native token is **LOCK** (Token-2022), used for job fees, worker collateral,
 | Layer | Technologies |
 |-------|-------------|
 | Frontend | Next.js 16, React 19, Tailwind CSS 4, Solana Wallet Adapter, TanStack Query, Recharts |
-| Backend | FastAPI, Uvicorn, httpx, Redis, Supabase Python SDK, solders |
+| Backend | Node.js, Hono, TypeScript, redis, Supabase JS, @solana/web3.js |
 | Blockchain | Solana, Anchor 1.0.2, Rust, Token-2022 |
 | Infrastructure | Docker Compose, Redis 7 |
 
 ## Prerequisites
 
-- **Node.js** 20+ and **pnpm** (or npm) for the web app
-- **Python** 3.11+ for the router service
+- **Node.js** 20+ and **npm** for the router API and web app
 - **Rust** and **Anchor CLI** 1.0.2 for on-chain programs
 - **Solana CLI** 3.1.10 (matching `Anchor.toml`)
 - **Docker** and **Docker Compose** (optional, for full stack)
@@ -55,32 +54,21 @@ cd gridlock
 ### Router service
 
 ```bash
-cd services/router
+cd gridlock-backend
 cp .env.example .env
 # Edit .env with your API keys and endpoints
-pip install -r requirements.txt
-uvicorn main:app --host 0.0.0.0 --port 8080
-```
-
-Or from the monorepo root:
-
-```bash
-pnpm router
-```
-
-### Web app
-
-```bash
-cd apps/web
 npm install
 npm run dev
 ```
 
-Or from the monorepo root:
+The API runs at [http://localhost:8080](http://localhost:8080). Interactive docs are available when running (health at `/health`).
+
+### Web app
 
 ```bash
-pnpm install
-pnpm dev
+cd gridlock-web
+npm install
+npm run dev
 ```
 
 The web app runs at [http://localhost:3000](http://localhost:3000) and expects the router at `http://localhost:8080` (set via `NEXT_PUBLIC_API_URL`).
@@ -90,8 +78,8 @@ The web app runs at [http://localhost:3000](http://localhost:3000) and expects t
 From the monorepo root:
 
 ```bash
-cp services/router/.env.example services/router/.env
-# Edit services/router/.env before starting
+cp gridlock-backend/.env.example gridlock-backend/.env
+# Edit gridlock-backend/.env before starting
 docker compose up
 ```
 
@@ -179,11 +167,11 @@ Workers silent for more than 120 seconds are automatically set to `AutoGated` an
 | `GET /v1/stats/pd` | Prefill/Decode disaggregation stats |
 | `GET /v1/autoscale/signal` | Scaling pressure recommendations |
 
-Interactive API docs are available at [http://localhost:8080/docs](http://localhost:8080/docs) when the router is running.
+Interactive API reference is in the web dashboard at `/docs`. Health check: [http://localhost:8080/health](http://localhost:8080/health).
 
 ## Configuration
 
-Copy `services/router/.env.example` to `services/router/.env`:
+Copy `gridlock-backend/.env.example` to `gridlock-backend/.env`:
 
 ```bash
 # Inference backend
@@ -211,14 +199,14 @@ NEXT_PUBLIC_API_URL=http://localhost:8080
 WATCHER_SAMPLE_RATE=0.05
 ```
 
-When `API_KEYS` is empty, authentication is disabled (development mode). Open paths (`/health`, `/v1/live`, `/docs`) are always unauthenticated.
+When `API_KEYS` is empty, authentication is disabled (development mode). Open paths (`/health`, `/v1/live`) are always unauthenticated.
 
 ### Supabase setup
 
 Run the SQL migration once in the Supabase SQL editor:
 
 ```bash
-# Schema is in services/router/migrations/001_initial.sql
+# Schema is in gridlock-backend/migrations/001_initial.sql
 ```
 
 See also `preset/setup.md` for a quick-start preset with Groq, Supabase, and Helius devnet.
@@ -232,7 +220,7 @@ Customer / AI Agent
         ▼
 ┌───────────────────────────────┐
 │      Gridlock Router          │
-│  FastAPI — port 8080          │
+│  Hono (TypeScript) — port 8080│
 │                               │
 │  1. Auth (API key)            │
 │  2. KV-cache prefix (Redis)   │
@@ -274,52 +262,38 @@ Customer / AI Agent
 
 ```
 gridlock/
-├── Anchor.toml                 # Anchor workspace config and program IDs
-├── Cargo.toml                  # Rust workspace for on-chain programs
-├── docker-compose.yml          # Redis + router + web
-├── package.json                # pnpm workspace root
-├── apps/
-│   └── web/                    # Next.js dashboard
-│       └── src/
-│           ├── app/            # Pages: console, worker, explorer, stake, etc.
-│           ├── components/     # Navbar, charts, providers
-│           └── lib/            # API client, utilities
-├── services/
-│   └── router/                 # FastAPI router service
-│       ├── main.py             # API and routing logic
-│       ├── requirements.txt
-│       ├── Dockerfile
-│       ├── migrations/         # Supabase schema
-│       └── test_api.py         # API integration tests
-├── programs/                   # Anchor on-chain programs
-│   ├── provider-registry/      # Worker registration and heartbeats
-│   ├── job-scheduler/          # Job escrow and lifecycle
-│   ├── sla-registry/           # Latency receipts and watcher verification
-│   ├── sla-enforcer/           # Penalty settlement via PermanentDelegate
-│   ├── fee-collector/          # Fee splits and transfer hook
-│   └── governance/             # DAO proposals and voting
-├── scripts/
-│   └── create-lock-mint.ts     # Token-2022 LOCK mint creation
-└── preset/
-    └── setup.md                # Quick-start preset guide
+├── gridlock/                   # Anchor monorepo (on-chain programs)
+│   ├── Anchor.toml
+│   ├── Cargo.toml
+│   ├── docker-compose.yml      # Redis + router + web
+│   ├── programs/               # Anchor on-chain programs
+│   ├── scripts/
+│   └── preset/
+├── gridlock-backend/           # TypeScript router API (Hono)
+│   ├── src/
+│   ├── migrations/             # Supabase schema
+│   └── test/                   # API integration tests
+├── gridlock-web/               # Next.js dashboard
+└── gridlock-worker/            # Electron GPU worker desktop client
 ```
 
 ## Development
 
 ### Monorepo scripts
 
-From `gridlock/`:
+From `gridlock-backend/`:
 
 ```bash
-pnpm dev       # Start Next.js web app
-pnpm build     # Build web app for production
-pnpm router    # Start router with uvicorn
+npm run dev       # Start router API (watch mode)
+npm run build     # Compile TypeScript
+npm run start     # Run production build
+npm run test:api  # API integration tests (server must be running)
 ```
 
 ### Web app
 
 ```bash
-cd apps/web
+cd gridlock-web
 npm run dev      # Development server
 npm run build    # Production build
 npm run start    # Serve production build
@@ -331,9 +305,9 @@ npm run lint     # ESLint
 With the router running on port 8080:
 
 ```bash
-cd services/router
-python test_api.py
-python test_api.py --base http://localhost:8080 --key sk-grid-yourkey
+cd gridlock-backend
+npm run test:api
+npm run test:api -- --base http://localhost:8080 --key sk-grid-yourkey
 ```
 
 ### Anchor programs

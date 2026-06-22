@@ -38,7 +38,7 @@ This document is the source of truth for turning Gridlock from a **marketplace-s
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  Gridlock Router (FastAPI) — existing services/router       │
+│  Gridlock Router (Hono/TypeScript) — gridlock-backend       │
 │  auth · worker pick · latency measure · on-chain settlement  │
 └───────────────────────────┬─────────────────────────────────┘
                             │  HTTP to worker.endpoint
@@ -70,12 +70,9 @@ This document is the source of truth for turning Gridlock from a **marketplace-s
 
 ```
 gridlock/
-├── apps/
-│   ├── web/                 # Customer dashboard (existing)
-│   └── worker-desktop/      # NEW — Electron worker app
-├── services/
-│   ├── router/              # FastAPI router (existing, needs hardening)
-│   └── watcher/             # NEW (Phase 4) — optional verification nodes
+├── gridlock-backend/        # TypeScript router API (Hono)
+├── gridlock-web/            # Customer dashboard
+├── gridlock-worker/         # Electron worker app
 ├── programs/                # Anchor on-chain (existing)
 ├── scripts/
 └── docs/
@@ -94,7 +91,7 @@ gridlock/
 - [ ] When `DEMO_MODE`: allow Groq shared endpoint, seed fake workers/jobs
 - [ ] When `DEMO_MODE=false`: require real worker endpoints; no seed data
 - [ ] Update `README.md` with **Shipped / Partial / Planned** feature table
-- [ ] Update `apps/web/docs` to label Groq as **demo-only**, vLLM/local as **production worker path**
+- [ ] Update `gridlock-web` docs to label Groq as **demo-only**, vLLM/local as **production worker path**
 - [ ] Rename or comment router `_watcher_sample` → `_watcher_simulation` to avoid confusion with on-chain watchers
 
 ### Exit criteria
@@ -290,7 +287,7 @@ FeeCollector.distribute_fees (60/20/10/10)
 
 ## Configuration Reference
 
-### Router (`services/router/.env`)
+### Router (`gridlock-backend/.env`)
 
 | Variable | Demo | Production |
 |----------|------|------------|
@@ -300,7 +297,7 @@ FeeCollector.distribute_fees (60/20/10/10)
 | `SOLANA_RPC_URL` | devnet | devnet → mainnet |
 | `REDIS_URL` | optional | recommended |
 
-### Web (`apps/web/.env`)
+### Web (`gridlock-web/.env`)
 
 | Variable | Purpose |
 |----------|---------|
@@ -380,8 +377,8 @@ Record choices here as the team decides:
 
 | Path | Role |
 |------|------|
-| `gridlock/services/router/main.py` | Router — worker registry, routing, settlement |
-| `gridlock/apps/web/` | Customer dashboard |
+| `gridlock-backend/src/` | Router — worker registry, routing, settlement |
+| `gridlock-web/` | Customer dashboard |
 | `gridlock/programs/` | On-chain programs |
 | `gridlock/scripts/create-lock-mint.ts` | LOCK token setup |
 | `README.md` | Public overview (keep in sync with this plan) |

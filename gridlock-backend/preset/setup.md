@@ -1,11 +1,11 @@
 # Gridlock — My Preset
 
-Copy `.env` to `gridlock/services/router/.env` and start the backend:
+Copy `.env` to `gridlock-backend/.env` and start the backend:
 
 ```bash
-cd gridlock/services/router
-pip install -r requirements.txt
-uvicorn main:app --host 0.0.0.0 --port 8080
+cd gridlock-backend
+npm install
+npm run dev
 ```
 
 ## Services wired in
