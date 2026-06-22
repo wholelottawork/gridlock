@@ -595,11 +595,11 @@ export default function ConsolePage() {
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
                   <div className={`toggle${teeOnly ? " on" : ""}`}
-                    style={{ transform: "scale(1.4)", background: teeOnly ? "var(--purple)" : undefined, borderColor: teeOnly ? "var(--purple)" : undefined }}
+                    style={{ transform: "scale(1.4)", background: teeOnly ? "var(--text-primary)" : undefined, borderColor: teeOnly ? "var(--text-primary)" : undefined }}
                     onClick={() => setTeeOnly((p: boolean) => !p)}>
                     <div className="toggle-thumb" />
                   </div>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: teeOnly ? "var(--purple)" : "var(--text-muted)" }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: teeOnly ? "var(--text-primary)" : "var(--text-muted)" }}>
                     {teeOnly ? "ENABLED" : "DISABLED"}
                   </span>
                 </div>
@@ -613,8 +613,8 @@ export default function ConsolePage() {
                 { n: "02", title: "Attestation Hash",  desc: "Every confidential job produces a signed attestation hash proving execution happened inside a TEE. Stored on-chain in the SLARegistry." },
                 { n: "03", title: "Slash on Failure",  desc: "Workers who fail TEE attestation face an additional reputation slash on top of the standard SLA penalty." },
               ].map((c) => (
-                <div key={c.n} className="card" style={{ borderColor: teeOnly ? "rgba(180,100,255,0.2)" : undefined }}>
-                  <div style={{ fontSize: 10, fontWeight: 900, color: "var(--purple)", marginBottom: 6 }}>{c.n}</div>
+                <div key={c.n} className="card">
+                  <div style={{ fontSize: 10, fontWeight: 900, color: "var(--text-muted)", marginBottom: 6 }}>{c.n}</div>
                   <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13 }}>{c.title}</div>
                   <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6, fontWeight: 700 }}>{c.desc}</div>
                 </div>
@@ -654,7 +654,7 @@ export default function ConsolePage() {
                   ].map(([gpu, mode, mem, status]) => (
                     <tr key={gpu}>
                       <td style={{ fontWeight: 700, color: "var(--text-secondary)" }}>{gpu}</td>
-                      <td style={{ color: status === "Supported" ? "var(--purple)" : "var(--text-muted)", fontSize: 12 }}>{mode}</td>
+                      <td style={{ color: "var(--text-secondary)", fontSize: 12 }}>{mode}</td>
                       <td style={{ color: "var(--text-muted)", fontSize: 11 }}>{mem}</td>
                       <td>
                         <span style={{ fontSize: 10, fontWeight: 700, color: status === "Supported" ? "var(--green)" : status.startsWith("Coming") ? "var(--yellow)" : "var(--text-muted)" }}>
@@ -668,7 +668,7 @@ export default function ConsolePage() {
             </div>
 
             {teeOnly && (
-              <div style={{ background: "rgba(180,100,255,0.06)", border: "1px solid rgba(180,100,255,0.2)", borderRadius: 8, padding: "14px 18px", fontSize: 13, color: "var(--purple)", lineHeight: 1.6 }}>
+              <div style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, padding: "14px 18px", fontSize: 13, color: "var(--text-primary)", lineHeight: 1.6 }}>
                 <strong>TEE mode is active.</strong> All requests in the Playground tab will be routed to Confidential-tier workers with attestation hashes included in every response.
               </div>
             )}
