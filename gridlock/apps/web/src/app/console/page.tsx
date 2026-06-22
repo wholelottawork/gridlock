@@ -160,7 +160,7 @@ export default function ConsolePage() {
 
       <div style={{ marginBottom: 28 }}>
         <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 4, letterSpacing: "-0.3px" }}>SLA Console</h1>
-        <p style={{ fontSize: 13, color: "var(--text-muted)" }}>
+        <p style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 700 }}>
           {realStats ? `${realStats.active_workers} active workers · ${realStats.jobs_total} jobs tracked · ${realStats.sla_pass_rate}% SLA pass rate` : "Monitor inference SLA in real time. Penalties auto-credited on miss."}
         </p>
       </div>
@@ -376,17 +376,16 @@ export default function ConsolePage() {
                 <LineChart data={latencyHistory}>
                   <XAxis hide /><YAxis hide domain={[0, 800]} />
                   <Tooltip contentStyle={{ background: "var(--bg-3)", border: "1px solid var(--border)", borderRadius: 4, fontSize: 12 }} labelStyle={{ display: "none" }} />
-                  <ReferenceLine y={300} stroke="rgba(255,255,255,0.15)" strokeDasharray="4 2" />
-                  <ReferenceLine y={800} stroke="rgba(255,255,255,0.08)" strokeDasharray="4 2" />
-                  <Line type="monotone" dataKey="p99" stroke="#ffffff" dot={false} strokeWidth={2} />
-                  <Line type="monotone" dataKey="p50" stroke="rgba(255,255,255,0.25)" dot={false} strokeWidth={1} />
+                  <ReferenceLine y={300} stroke="rgba(255,255,255,0.45)" strokeDasharray="4 2" strokeWidth={2} />
+                  <Line type="monotone" dataKey="p99" stroke="#ffffff" dot={false} strokeWidth={2.5} />
+                  <Line type="monotone" dataKey="p50" stroke="rgba(255,255,255,0.55)" dot={false} strokeWidth={2} />
                 </LineChart>
               </ResponsiveContainer>
             </ChartWrapper>
             <div style={{ display: "flex", gap: 16, marginTop: 8 }}>
-              <span style={{ fontSize: 11, color: "var(--text-primary)" }}>— p99</span>
-              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>— p50</span>
-              <span style={{ fontSize: 11, color: "var(--text-muted)" }}>- - SLA limit</span>
+              <span style={{ fontSize: 11, color: "var(--text-primary)", fontWeight: 700 }}>— p99</span>
+              <span style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700 }}>— p50</span>
+              <span style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700 }}>- - SLA limit</span>
             </div>
           </div>
 
@@ -416,7 +415,7 @@ export default function ConsolePage() {
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 700, color: privacyDefault ? "var(--orange)" : "var(--text-primary)" }}>Privacy by Default</div>
-                      <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Route to TEE-capable workers only</div>
+                      <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700 }}>Route to TEE-capable workers only</div>
                     </div>
                     <div className={`toggle${privacyDefault ? " on" : ""}`} onClick={() => setPrivacyDefault((p) => !p)}>
                       <div className="toggle-thumb" />
@@ -452,7 +451,7 @@ export default function ConsolePage() {
       {/* ── MONITOR ──────────────────────────────────────────────────────────── */}
       {tab === "monitor" && (
         <div className="card">
-          <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 14 }}>
+          <div style={{ fontSize: 10, color: "var(--text-primary)", fontWeight: 900, letterSpacing: "1px", marginBottom: 14 }}>
             LIVE REQUEST STREAM — {realJobs ? `${realJobs.length} from backend` : `${mockJobs.length} simulated`}
           </div>
           <div style={{ overflowX: "auto" }}>
@@ -526,7 +525,7 @@ export default function ConsolePage() {
             </div>
             <div className="card">
               <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 10 }}>HOW IT WORKS</div>
-              <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6 }}>
+              <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6, fontWeight: 700 }}>
                 Penalties transfer directly from worker staked LOCK to your wallet via PermanentDelegate — no dispute needed.
               </div>
             </div>
@@ -590,7 +589,7 @@ export default function ConsolePage() {
                 <div>
                   <div style={{ fontSize: 10, color: "var(--orange)", fontWeight: 700, letterSpacing: "1px", marginBottom: 6 }}>CONFIDENTIAL COMPUTING</div>
                   <div style={{ fontSize: 18, fontWeight: 800, marginBottom: 4 }}>Privacy-Preserving Inference</div>
-                  <div style={{ fontSize: 13, color: "var(--text-muted)", maxWidth: 480, lineHeight: 1.6 }}>
+                  <div style={{ fontSize: 13, color: "var(--text-muted)", maxWidth: 480, lineHeight: 1.6, fontWeight: 700 }}>
                     Route all requests to TEE-capable workers (NVIDIA CC / AMD SEV). Your prompts are encrypted in hardware — the worker operator cannot read them.
                   </div>
                 </div>
@@ -617,18 +616,18 @@ export default function ConsolePage() {
                 <div key={c.n} className="card" style={{ borderColor: teeOnly ? "rgba(180,100,255,0.2)" : undefined }}>
                   <div style={{ fontSize: 10, fontWeight: 900, color: "var(--purple)", marginBottom: 6 }}>{c.n}</div>
                   <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 13 }}>{c.title}</div>
-                  <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6 }}>{c.desc}</div>
+                  <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6, fontWeight: 700 }}>{c.desc}</div>
                 </div>
               ))}
             </div>
 
             {/* TEE worker pool stats */}
             <div className="card">
-              <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 14 }}>TEE WORKER POOL</div>
+              <div style={{ fontSize: 10, color: "var(--text-primary)", fontWeight: 900, letterSpacing: "1px", marginBottom: 14 }}>TEE WORKER POOL</div>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
                 {[
-                  { label: "TEE WORKERS",      value: realStats ? realStats.tee_workers.toString()         : "—", accent: "var(--purple)" },
-                  { label: "CONFIDENTIAL SHARE", value: realStats ? `${realStats.confidential_share}%`    : "—", accent: "var(--purple)" },
+                  { label: "TEE WORKERS",      value: realStats ? realStats.tee_workers.toString()         : "—", accent: "var(--text-primary)" },
+                  { label: "CONFIDENTIAL SHARE", value: realStats ? `${realStats.confidential_share}%`    : "—", accent: "var(--text-primary)" },
                   { label: "SLA TARGET",         value: "< 800ms + proof",                                  accent: "var(--text-secondary)" },
                   { label: "PENALTY",            value: "1× fee + slash",                                   accent: "var(--red)" },
                 ].map((s) => (
@@ -742,7 +741,7 @@ export default function ConsolePage() {
                     <div key={m.model}>
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
                         <span style={{ fontSize: 11, fontFamily: "monospace", color: "var(--text-secondary)" }}>{m.model.split("-").slice(0, 3).join("-")}</span>
-                        <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{m.spend.toFixed(2)} LOCK</span>
+                        <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700 }}>{m.spend.toFixed(2)} LOCK</span>
                       </div>
                       <div className="progress-track">
                         <div className="progress-fill" style={{ width: `${m.pct}%`, background: "var(--orange)" }} />
@@ -785,7 +784,7 @@ export default function ConsolePage() {
                     <tr key={inv.period}>
                       <td style={{ fontWeight: 600 }}>{inv.period}</td>
                       <td style={{ color: "var(--orange)", fontWeight: 700 }}>{inv.amount.toFixed(2)} LOCK</td>
-                      <td><span style={{ fontSize: 10, fontWeight: 700, color: "var(--green)", background: "rgba(0,220,100,0.08)", padding: "2px 7px", borderRadius: 3 }}>{inv.status.toUpperCase()}</span></td>
+                      <td><span style={{ fontSize: 10, fontWeight: 700, color: "#FFFFFF", padding: "2px 7px", borderRadius: 3 }}>{inv.status.toUpperCase()}</span></td>
                       <td style={{ fontFamily: "monospace", fontSize: 11, color: "var(--text-muted)" }}>{inv.txId}</td>
                     </tr>
                   ))}

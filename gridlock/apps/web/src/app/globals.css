@@ -330,6 +330,18 @@ textarea::placeholder { color: var(--text-muted); }
   color: var(--text-muted);
 }
 
+/* ── Flow beam ───────────────────────────────────────────────────────────── */
+@keyframes flow-beam {
+  0%   { background-position: -30% center; }
+  100% { background-position: 130% center; }
+}
+.flow-beam {
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.85) 50%, transparent 100%);
+  background-size: 30% 100%;
+  background-repeat: no-repeat;
+  animation: flow-beam 2.4s linear infinite;
+}
+
 /* ── Subtle hover border ─────────────────────────────────────────────────── */
 .glow-hover {
   transition: border-color 0.2s;

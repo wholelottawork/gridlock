@@ -117,7 +117,7 @@ export default function ExplorerPage() {
 
       <div style={{ marginBottom: 28 }}>
         <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 4, letterSpacing: "-0.3px" }}>Explorer</h1>
-        <p style={{ fontSize: 13, color: "var(--text-muted)" }}>Public, on-chain-verifiable network and worker history. No account required.</p>
+        <p style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 700 }}>Public, on-chain-verifiable network and worker history. No account required.</p>
       </div>
 
       <div className="tab-bar" style={{ marginBottom: 24 }}>
@@ -224,7 +224,7 @@ export default function ExplorerPage() {
                     <span style={{ color: r.c, fontWeight: 700 }}>{r.v}</span>
                   </div>
                 ))}
-                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>Updated every 3s · Solana on-chain</div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700 }}>Updated every 3s · Solana on-chain</div>
               </div>
             </div>
 

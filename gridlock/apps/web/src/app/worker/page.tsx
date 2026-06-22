@@ -133,7 +133,7 @@ export default function WorkerPage() {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 28 }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 4, letterSpacing: "-0.3px" }}>Worker Dashboard</h1>
-          <div style={{ fontSize: 13, color: "var(--text-muted)" }}>
+          <div style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 700 }}>
             <span style={{ fontFamily: "monospace" }}>{dispAddr}</span>
             <span style={{ margin: "0 8px", color: "var(--border-2)" }}>·</span>
             {dispHW}
@@ -167,14 +167,14 @@ export default function WorkerPage() {
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
               <button onClick={handleToggle} style={{
                 width: "100%", height: 56, borderRadius: 8,
-                background: status === "Active" ? "var(--green)" : status === "Draining" ? "var(--yellow)" : "var(--bg-3)",
+                background: status === "Active" ? "#FFFFFF" : status === "Draining" ? "var(--bg-3)" : "var(--bg-3)",
                 border: "none", cursor: "pointer", fontSize: 14, fontWeight: 800,
-                color: status === "Paused" ? "var(--text-secondary)" : "#000",
+                color: status === "Active" ? "#000000" : "var(--text-secondary)",
                 transition: "all 0.2s",
               }}>
                 {status === "Active" ? "ACTIVE — Click to Pause" : status === "Draining" ? `Draining ${inFlight} jobs…` : "PAUSED — Click to Resume"}
               </button>
-              <div style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "center" }}>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "center", fontWeight: 700 }}>
                 {status === "Active" && "Graceful drain on pause — no penalty"}
                 {status === "Draining" && `Waiting for ${inFlight} in-flight jobs to complete`}
                 {status === "Paused" && "Not accepting new requests"}
@@ -184,7 +184,7 @@ export default function WorkerPage() {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px", background: "var(--bg-3)", borderRadius: 6 }}>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: confidential ? "var(--purple)" : "var(--text-secondary)", marginBottom: 2 }}>Confidential Mode</div>
-                <div style={{ fontSize: 11, color: "var(--text-muted)" }}>TEE-only jobs · premium pay</div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700 }}>TEE-only jobs · premium pay</div>
               </div>
               <div className={`toggle${confidential ? " on" : ""}`}
                 style={{ background: confidential ? "var(--purple)" : undefined, borderColor: confidential ? "var(--purple)" : undefined }}
@@ -212,7 +212,7 @@ export default function WorkerPage() {
         <div className="card card-orange">
           <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 16 }}>EARNINGS TODAY</div>
           <div style={{ fontSize: 38, fontWeight: 900, color: "var(--orange)", letterSpacing: "-1px" }}>{dispEarnings.toFixed(2)}</div>
-          <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 16 }}>LOCK</div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 16, fontWeight: 700 }}>$LOCK</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
             <div style={{ background: "var(--bg-3)", borderRadius: 6, padding: "10px" }}>
               <div style={{ fontSize: 16, fontWeight: 700 }}>
@@ -250,7 +250,6 @@ export default function WorkerPage() {
                 <div key={tier}>
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 3 }}>
                     <span style={{ fontSize: 11, color: colors[tier], fontWeight: 700, textTransform: "uppercase" }}>{tier}</span>
-                    <span style={{ fontSize: 11, color: "var(--text-muted)" }}>{pct}%</span>
                   </div>
                   <div className="progress-track">
                     <div className="progress-fill" style={{ width: `${pct}%`, background: colors[tier] }} />
@@ -272,7 +271,7 @@ export default function WorkerPage() {
                 <XAxis hide />
                 <YAxis hide domain={[0, 600]} />
                 <Tooltip contentStyle={{ background: "var(--bg-3)", border: "1px solid var(--border)", borderRadius: 4, fontSize: 12 }} labelStyle={{ display: "none" }} />
-                <ReferenceLine y={300} stroke="rgba(255,255,255,0.12)" strokeDasharray="4 2" />
+                <ReferenceLine y={300} stroke="rgba(255,255,255,0.45)" strokeDasharray="4 2" strokeWidth={2} />
                 <Line type="monotone" dataKey="ttft" stroke="#ffffff" dot={false} strokeWidth={2} name="TTFT ms" />
                 <Line type="monotone" dataKey="tpot" stroke="rgba(255,255,255,0.25)" dot={false} strokeWidth={1.5} name="TPOT ms" />
               </LineChart>
@@ -281,7 +280,7 @@ export default function WorkerPage() {
           <div style={{ display: "flex", gap: 16, marginTop: 8 }}>
             <span style={{ fontSize: 11, color: "var(--text-primary)" }}>— TTFT</span>
             <span style={{ fontSize: 11, color: "var(--text-muted)" }}>— TPOT</span>
-            <span style={{ fontSize: 11, color: "var(--text-muted)" }}>- - SLA limit</span>
+            <span style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 700 }}>- - SLA limit</span>
           </div>
         </div>
 
@@ -331,7 +330,7 @@ export default function WorkerPage() {
         <div className="card">
           <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 14 }}>STAKED LOCK</div>
           <div style={{ fontSize: 28, fontWeight: 900, marginBottom: 4 }}>{dispStake.toLocaleString()}</div>
-          <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14 }}>LOCK</div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14, fontWeight: 700 }}>$LOCK</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
             <div style={{ background: "var(--bg-3)", borderRadius: 6, padding: "10px" }}>
               <div style={{ fontSize: 14, fontWeight: 700, color: "var(--orange)" }}>2.0×</div>
@@ -342,7 +341,7 @@ export default function WorkerPage() {
               <div style={{ fontSize: 11, color: "var(--text-muted)" }}>SLA collateral</div>
             </div>
           </div>
-          <div style={{ fontSize: 11, color: "var(--green)", background: "rgba(34,204,102,0.06)", borderRadius: 5, padding: "8px" }}>
+          <div style={{ fontSize: 11, color: "#777777", background: "rgba(255,255,255,0.04)", borderRadius: 5, padding: "8px", fontWeight: 700 }}>
             8% APY · ~{(dispStake * 0.08 / 365).toFixed(2)} LOCK/day
           </div>
         </div>

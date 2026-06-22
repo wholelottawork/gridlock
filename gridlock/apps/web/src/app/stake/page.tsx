@@ -81,12 +81,12 @@ export default function StakePage() {
 
       <div style={{ marginBottom: 28 }}>
         <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 4, letterSpacing: "-0.3px" }}>Stake LOCK</h1>
-        <p style={{ fontSize: 13, color: "var(--text-muted)" }}>Stake LOCK to earn 60% of all network penalties and unlock higher SLA tiers. 8% APY on staked balance.</p>
+        <p style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 700 }}>Stake LOCK to earn 60% of all network penalties and unlock higher SLA tiers. 8% APY on staked balance.</p>
       </div>
 
       {/* Wallet notices */}
       {isWalletRequired && (
-        <div style={{ marginBottom: 20, padding: "12px 18px", borderRadius: 8, background: "rgba(255,160,0,0.05)", border: "1px solid rgba(255,160,0,0.18)", fontSize: 13, color: "var(--orange)" }}>
+        <div style={{ marginBottom: 20, padding: "12px 18px", borderRadius: 8, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.12)", fontSize: 13, color: "var(--text-primary)", fontWeight: 700 }}>
           Connect your wallet (top right) to see your real LOCK balance and stake on-chain.
         </div>
       )}
@@ -96,7 +96,7 @@ export default function StakePage() {
         </div>
       )}
       {!LOCK_MINT_DEVNET && mounted && (
-        <div style={{ marginBottom: 14, padding: "10px 16px", borderRadius: 6, background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)", fontSize: 12, color: "var(--text-muted)" }}>
+        <div style={{ marginBottom: 14, padding: "10px 16px", borderRadius: 6, background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)", fontSize: 12, color: "var(--text-muted)", fontWeight: 700 }}>
           LOCK mint not deployed yet. Showing mock balances. Run <code>npx ts-node scripts/create-lock-mint.ts</code> and set <code>NEXT_PUBLIC_LOCK_MINT</code>.
         </div>
       )}
@@ -178,7 +178,7 @@ export default function StakePage() {
 
             <button
               className="btn btn-primary"
-              style={{ width: "100%", opacity: stakeNum > 0 && connected ? 1 : 0.4 }}
+              style={{ width: "100%", opacity: stakeNum > 0 && connected ? 1 : 1, background: "#FFFFFF", color: "#000000", borderColor: "#FFFFFF" }}
               disabled={!connected || stakeNum <= 0}
             >
               {connected ? "Stake LOCK" : "Connect Wallet to Stake"}
@@ -208,7 +208,7 @@ export default function StakePage() {
 
             <button
               className="btn btn-ghost"
-              style={{ width: "100%", borderColor: "rgba(255,255,255,0.12)", color: "var(--red)", opacity: connected ? 1 : 0.4 }}
+              style={{ width: "100%", background: "#FFFFFF", borderColor: "#FFFFFF", color: "#000000", opacity: connected ? 1 : 1 }}
               disabled={!connected}
             >
               {connected ? "Begin Unstake (7-day cooldown)" : "Connect Wallet to Unstake"}

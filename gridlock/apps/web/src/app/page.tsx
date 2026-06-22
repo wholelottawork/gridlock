@@ -62,7 +62,7 @@ function CodeBlock({ lines }: { lines: { text: string; dim?: boolean; indent?: n
     <div style={{ background: "var(--bg-0)", border: "1px solid var(--border)", borderRadius: 8, overflow: "hidden" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 16px", borderBottom: "1px solid var(--border)" }}>
         <div style={{ display: "flex", gap: 6 }}>
-          {["#ff5f57","#febc2e","#28c840"].map((c) => <div key={c} style={{ width: 10, height: 10, borderRadius: "50%", background: c }} />)}
+          {["#2a2a2a","#3d3d3d","#555555"].map((c) => <div key={c} style={{ width: 10, height: 10, borderRadius: "50%", background: c }} />)}
         </div>
         <button onClick={copy} style={{ background: "none", border: "none", color: copied ? "var(--green)" : "var(--text-muted)", fontSize: 11, cursor: "pointer", fontWeight: 700 }}>
           {copied ? "COPIED ✓" : "COPY"}
@@ -106,11 +106,22 @@ function CellVal({ v }: { v: boolean | string }) {
 const fadeUp = { hidden: { opacity: 0, y: 18 }, show: { opacity: 1, y: 0 } };
 const stagger = { hidden: {}, show: { transition: { staggerChildren: 0.07 } } };
 
+const DEFAULT_STATS: NetworkStats = {
+  activeworkers: 380,
+  slaPassRate: 98.2,
+  p99TtftMs: 245,
+  totalPenaltiesPaid: 15200,
+  requestsToday: 542000,
+  confidentialShare: 24.5,
+  teeWorkers: 132,
+};
+
 export default function LandingPage() {
-  const [stats, setStats] = useState<NetworkStats>(getNetworkStats());
+  const [stats, setStats] = useState<NetworkStats>(DEFAULT_STATS);
   const [role, setRole] = useState<Role>("customer");
 
   useEffect(() => {
+    setStats(getNetworkStats());
     const id = setInterval(() => setStats(getNetworkStats()), 4000);
     return () => clearInterval(id);
   }, []);
@@ -175,13 +186,13 @@ export default function LandingPage() {
                 ) : (
                   <>
                     <h1 style={{ fontSize: 52, fontWeight: 900, lineHeight: 1.05, marginBottom: 22, letterSpacing: "-1.5px" }}>
-                      Your GPU earns<br /><span style={{ color: "var(--green)" }}>$LOCK</span> while it runs AI
+                      Your GPU earns<br /><span className="gradient-text">$LOCK</span> while it runs AI
                     </h1>
-                    <p style={{ fontSize: 16, color: "var(--text-secondary)", lineHeight: 1.8, marginBottom: 36, maxWidth: 480 }}>
+                    <p style={{ fontSize: 16, color: "var(--text-secondary)", lineHeight: 1.8, marginBottom: 36, maxWidth: 480, fontWeight: 700 }}>
                       Install the worker software, point it at your GPU, stake some $LOCK as collateral, and start earning per request. Hit your SLA targets and your stake grows — miss them and a small penalty is auto-deducted.
                     </p>
                     <div style={{ display: "flex", gap: 12 }}>
-                      <Link href="/worker" className="btn" style={{ fontSize: 14, background: "var(--green)", color: "#000", border: "none", padding: "10px 24px", borderRadius: 6, fontWeight: 800 }}>Open Worker Dashboard</Link>
+                      <Link href="/worker" className="btn btn-primary" style={{ fontSize: 14 }}>Open Worker Dashboard</Link>
                       <Link href="/docs#workers" className="btn btn-ghost" style={{ fontSize: 14 }}>Setup Guide</Link>
                     </div>
                   </>
@@ -220,7 +231,7 @@ export default function LandingPage() {
             <div style={{ fontSize: 11, color: "var(--orange)", fontWeight: 700, letterSpacing: "1.5px", marginBottom: 14 }}>IN PLAIN ENGLISH</div>
             <h2 style={{ fontSize: 32, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 16 }}>What is Gridlock, really?</h2>
             <p style={{ color: "var(--text-secondary)", fontSize: 15, maxWidth: 620, margin: "0 auto", lineHeight: 1.8 }}>
-              Think of it like <strong style={{ color: "var(--text-primary)" }}>Uber for AI compute</strong> — but the car has a guaranteed arrival time, and if it&apos;s late, you automatically get a refund.
+              Think of it like <strong style={{ color: "#FFFFFF", fontWeight: 900 }}>Uber for AI</strong>{" "}compute but the car has a guaranteed arrival time, and if it&apos;s late, you automatically get a refund.
             </p>
           </div>
 
@@ -243,38 +254,36 @@ export default function LandingPage() {
               },
             ].map((c) => (
               <motion.div key={c.title} initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.45 }}
-                style={{ background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 10, padding: "28px" }}>
-                <div style={{ marginBottom: 16, color: "var(--text-primary)" }}>{c.icon}</div>
+                whileHover="hovered"
+                style={{ background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 10, padding: "28px", cursor: "default" }}>
+                <motion.div variants={{ hovered: { filter: "drop-shadow(0 0 8px rgba(255,255,255,0.85))", scale: 1.12 } }} transition={{ duration: 0.2 }}
+                  style={{ marginBottom: 16, color: "var(--text-primary)", display: "inline-block" }}>{c.icon}</motion.div>
                 <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 10 }}>{c.title}</div>
-                <div style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.8 }}>{c.body}</div>
+                <div style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.8, fontWeight: 700 }}>{c.body}</div>
               </motion.div>
             ))}
           </div>
 
           {/* Simple flow diagram */}
           <div style={{ background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 10, padding: "32px", textAlign: "center" }}>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 24 }}>HOW A REQUEST FLOWS</div>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 0, flexWrap: "wrap", rowGap: 12 }}>
+            <div style={{ fontSize: 11, color: "var(--text-primary)", fontWeight: 900, letterSpacing: "1px", marginBottom: 24 }}>HOW A REQUEST FLOWS</div>
+            <div style={{ position: "relative", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+              {/* Animated track */}
+              <div style={{ position: "absolute", top: "50%", left: "3%", right: "3%", height: 1, background: "rgba(255,255,255,0.07)", overflow: "hidden", zIndex: 0 }}>
+                <div className="flow-beam" style={{ position: "absolute", inset: 0 }} />
+              </div>
               {[
-                { label: "You send a prompt", sub: "via API or Console", color: "var(--text-primary)" },
-                null,
-                { label: "Router picks a worker", sub: "best GPU for your tier", color: "var(--orange)" },
-                null,
-                { label: "Worker runs the AI", sub: "on their GPU", color: "var(--green)" },
-                null,
-                { label: "Response + proof", sub: "delivered to you", color: "var(--text-primary)" },
-                null,
-                { label: "Penalty or payment", sub: "settled automatically", color: "var(--orange)" },
-              ].map((item, i) =>
-                item === null ? (
-                  <div key={i} style={{ color: "var(--border-2)", fontSize: 18, padding: "0 8px" }}>→</div>
-                ) : (
-                  <div key={i} style={{ background: "var(--bg-3)", border: "1px solid var(--border)", borderRadius: 8, padding: "12px 16px", minWidth: 130 }}>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: item.color, marginBottom: 3 }}>{item.label}</div>
-                    <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.sub}</div>
-                  </div>
-                )
-              )}
+                { label: "You send a prompt",    sub: "via API or Console" },
+                { label: "Router picks a worker", sub: "best GPU for your tier" },
+                { label: "Worker runs the AI",   sub: "on their GPU" },
+                { label: "Response + proof",     sub: "delivered to you" },
+                { label: "Penalty or payment",   sub: "settled automatically" },
+              ].map((item, i) => (
+                <div key={i} style={{ position: "relative", zIndex: 1, background: "var(--bg-3)", border: "1px solid var(--border)", borderRadius: 8, padding: "12px 16px", flex: 1 }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-primary)", marginBottom: 3 }}>{item.label}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{item.sub}</div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
@@ -291,7 +300,7 @@ export default function LandingPage() {
                 <div>
                   <div style={{ fontSize: 11, color: "var(--orange)", fontWeight: 700, letterSpacing: "1px", marginBottom: 14 }}>FOR DEVELOPERS</div>
                   <h2 style={{ fontSize: 30, fontWeight: 800, marginBottom: 16, letterSpacing: "-0.5px" }}>One URL change. Guaranteed latency.</h2>
-                  <p style={{ color: "var(--text-secondary)", lineHeight: 1.8, marginBottom: 28, fontSize: 15 }}>
+                  <p style={{ color: "var(--text-secondary)", lineHeight: 1.8, marginBottom: 28, fontSize: 15, fontWeight: 700 }}>
                     Gridlock is a drop-in replacement for the OpenAI API. If the request misses your SLA target, the penalty is auto-credited on-chain — no dispute, no claim, no waiting.
                   </p>
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -302,7 +311,7 @@ export default function LandingPage() {
                     ].map((s) => (
                       <div key={s.step} style={{ display: "flex", alignItems: "center", gap: 12 }}>
                         <div style={{ width: 24, height: 24, borderRadius: "50%", background: "var(--orange-dim)", border: "1px solid var(--orange-border)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 900, color: "var(--orange)", flexShrink: 0 }}>{s.step}</div>
-                        <span style={{ fontSize: 13, color: "var(--text-secondary)" }}>{s.text}</span>
+                        <span style={{ fontSize: 13, color: "var(--text-secondary)", fontWeight: 800 }}>{s.text}</span>
                       </div>
                     ))}
                   </div>
@@ -333,7 +342,7 @@ export default function LandingPage() {
                 <div style={{ textAlign: "center", marginBottom: 48 }}>
                   <div style={{ fontSize: 11, color: "var(--orange)", fontWeight: 700, letterSpacing: "1.5px", marginBottom: 14 }}>SPEED TIERS</div>
                   <h2 style={{ fontSize: 30, fontWeight: 800, letterSpacing: "-0.5px" }}>Pick how fast you need it</h2>
-                  <p style={{ color: "var(--text-secondary)", marginTop: 12, fontSize: 14 }}>Miss the target — penalty auto-pays from worker stake directly to your wallet.</p>
+                  <p style={{ color: "var(--text-secondary)", marginTop: 12, fontSize: 14, fontWeight: 700 }}>Miss the target — penalty auto-pays from worker stake directly to your wallet.</p>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
                   {slaTiers.map((t, i) => (
@@ -364,7 +373,7 @@ export default function LandingPage() {
               <div style={{ textAlign: "center", marginBottom: 48 }}>
                 <div style={{ fontSize: 11, color: "var(--green)", fontWeight: 700, letterSpacing: "1.5px", marginBottom: 14 }}>FOR WORKERS</div>
                 <h2 style={{ fontSize: 30, fontWeight: 800, letterSpacing: "-0.5px" }}>Set up in 4 steps</h2>
-                <p style={{ color: "var(--text-secondary)", marginTop: 12, fontSize: 14 }}>You need a Solana wallet, a strong GPU, and about 15 minutes.</p>
+                <p style={{ color: "var(--text-secondary)", marginTop: 12, fontSize: 14, fontWeight: 700 }}>You need a Solana wallet, a strong GPU, and about 15 minutes.</p>
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 48 }}>
@@ -378,7 +387,7 @@ export default function LandingPage() {
                     style={{ background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 10, padding: "24px" }}>
                     <div style={{ fontSize: 11, fontWeight: 900, color: s.color, marginBottom: 10, letterSpacing: "1px" }}>{s.n}</div>
                     <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 10 }}>{s.title}</div>
-                    <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.7 }}>{s.desc}</div>
+                    <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.7, fontWeight: 700 }}>{s.desc}</div>
                   </motion.div>
                 ))}
               </div>
@@ -386,7 +395,7 @@ export default function LandingPage() {
               {/* Setup commands */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                 <div>
-                  <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 10 }}>STEP 1 + 2 — INSTALL</div>
+                  <div style={{ fontSize: 11, color: "var(--text-primary)", fontWeight: 900, letterSpacing: "1px", marginBottom: 10 }}>STEP 1 + 2 — INSTALL</div>
                   <CodeBlock lines={[
                     { text: "# Install vLLM (requires CUDA GPU)", dim: true },
                     { text: "pip install vllm" },
@@ -400,7 +409,7 @@ export default function LandingPage() {
                   ]} />
                 </div>
                 <div>
-                  <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 10 }}>STEP 3 + 4 — REGISTER & START</div>
+                  <div style={{ fontSize: 11, color: "var(--text-primary)", fontWeight: 900, letterSpacing: "1px", marginBottom: 10 }}>STEP 3 + 4 — REGISTER & START</div>
                   <CodeBlock lines={[
                     { text: "# Register your worker on-chain", dim: true },
                     { text: "gridlock-worker register \\" },
@@ -423,7 +432,7 @@ export default function LandingPage() {
 
                   {/* Hardware table */}
                   <div>
-                    <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 20 }}>HARDWARE REQUIREMENTS</div>
+                    <div style={{ fontSize: 11, color: "var(--text-primary)", fontWeight: 900, letterSpacing: "1px", marginBottom: 20 }}>HARDWARE REQUIREMENTS</div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       {[
                         { gpu: "NVIDIA RTX 4090",  tier: "Batch + Standard",           stake: "1K $LOCK",  earnings: "~12 $LOCK/day",  status: "ok" },
@@ -435,26 +444,23 @@ export default function LandingPage() {
                         <div key={r.gpu} style={{ display: "flex", alignItems: "center", gap: 12, background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 8, padding: "14px 16px" }}>
                           <div style={{ flex: 1 }}>
                             <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 2 }}>{r.gpu}</div>
-                            <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{r.tier}</div>
+                            <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700 }}>{r.tier}</div>
                           </div>
                           <div style={{ textAlign: "right" }}>
                             <div style={{ fontSize: 12, color: "var(--green)", fontWeight: 700 }}>{r.earnings}</div>
                             <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{r.stake} stake req.</div>
                           </div>
-                          {r.status === "tee" && (
-                            <span style={{ fontSize: 10, fontWeight: 700, color: "var(--purple)", background: "rgba(180,100,255,0.1)", border: "1px solid rgba(180,100,255,0.2)", borderRadius: 4, padding: "2px 6px" }}>TEE</span>
-                          )}
                         </div>
                       ))}
                     </div>
-                    <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 12 }}>
-                      Earnings depend on network demand, SLA tier, and reliability score. Estimates at current network utilization.
+                    <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 12, fontWeight: 700 }}>
+                      Earnings depend on network demand, SLA tier, and reliability score. Estimates at current network.
                     </div>
                   </div>
 
                   {/* Earnings breakdown */}
                   <div>
-                    <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 20 }}>HOW WORKERS EARN</div>
+                    <div style={{ fontSize: 11, color: "var(--text-primary)", fontWeight: 900, letterSpacing: "1px", marginBottom: 20 }}>HOW WORKERS EARN</div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                       {[
                         { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>, title: "Per-request fees",      desc: "Customers pay in $LOCK for every completed request. Higher SLA tiers pay more. Hit your target time and you keep 20% of the network fee." },
@@ -466,7 +472,7 @@ export default function LandingPage() {
                           <div style={{ flexShrink: 0, color: "var(--text-primary)", marginTop: 2 }}>{item.icon}</div>
                           <div>
                             <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>{item.title}</div>
-                            <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.7 }}>{item.desc}</div>
+                            <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.7, fontWeight: 700 }}>{item.desc}</div>
                           </div>
                         </div>
                       ))}
@@ -497,9 +503,9 @@ export default function LandingPage() {
                 </tr>
               </thead>
               <tbody>
-                {competitors.map((row) => (
+                {competitors.map((row, i) => (
                   <tr key={row.feature}>
-                    <td style={{ color: "var(--text-secondary)", fontWeight: 500 }}>{row.feature}</td>
+                    <td style={{ color: "var(--text-secondary)", fontWeight: 500 }}><span style={{ color: "var(--text-muted)", marginRight: 10 }}>{i + 1}.</span>{row.feature}</td>
                     <td style={{ textAlign: "center" }}><CellVal v={row.render} /></td>
                     <td style={{ textAlign: "center" }}><CellVal v={row.io} /></td>
                     <td style={{ textAlign: "center" }}><CellVal v={row.akash} /></td>
@@ -519,7 +525,7 @@ export default function LandingPage() {
         <h2 style={{ fontSize: 42, fontWeight: 900, marginBottom: 16, letterSpacing: "-1px" }}>
           Ready to {role === "customer" ? "build" : "earn"}?
         </h2>
-        <p style={{ color: "var(--text-secondary)", fontSize: 16, marginBottom: 40, maxWidth: 520, margin: "0 auto 40px" }}>
+        <p style={{ color: "var(--text-secondary)", fontSize: 16, marginBottom: 40, maxWidth: 700, margin: "0 auto 40px", fontWeight: 800, whiteSpace: "nowrap" }}>
           {role === "customer"
             ? "Change one URL. Add one field. Get a latency guarantee backed by real money."
             : "Install two packages. Register in 60 seconds. Your GPU earns $LOCK around the clock."}
@@ -537,7 +543,7 @@ export default function LandingPage() {
             </>
           )}
         </div>
-        <p style={{ marginTop: 24, fontSize: 12, color: "var(--text-muted)" }}>
+        <p style={{ marginTop: 24, fontSize: 12, color: "var(--text-muted)", fontWeight: 700 }}>
           {role === "customer" ? "Penalties are automatic. No trust required." : "Pausing is free. You keep your stake."}
         </p>
       </motion.section>

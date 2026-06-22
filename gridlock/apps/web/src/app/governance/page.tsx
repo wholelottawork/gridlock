@@ -98,9 +98,9 @@ const NETWORK_PARAMS = [
 
 function StatusBadge({ status }: { status: ProposalStatus }) {
   const config: Record<ProposalStatus, { color: string; bg: string; label: string }> = {
-    active:  { color: "var(--green)",          bg: "rgba(0,220,100,0.08)",   label: "ACTIVE" },
+    active:  { color: "var(--text-primary)",    bg: "rgba(255,255,255,0.06)", label: "ACTIVE" },
     passed:  { color: "var(--orange)",         bg: "var(--orange-dim)",      label: "PASSED" },
-    failed:  { color: "var(--red)",            bg: "rgba(255,60,60,0.08)",   label: "FAILED" },
+    failed:  { color: "var(--text-secondary)",  bg: "rgba(255,255,255,0.06)", label: "FAILED" },
     queued:  { color: "var(--text-secondary)", bg: "rgba(255,255,255,0.05)", label: "QUEUED" },
   };
   const c = config[status];
@@ -139,9 +139,6 @@ function VoteBar({ proposal }: { proposal: Proposal }) {
         <span style={{ color: "var(--green)", fontWeight: 700 }}>For {forPct.toFixed(1)}%</span>
         <span style={{ color: "var(--red)", fontWeight: 700 }}>Against {agPct.toFixed(1)}%</span>
         <span style={{ color: "var(--text-muted)" }}>Abstain {abPct.toFixed(1)}%</span>
-        <span style={{ marginLeft: "auto", color: quorumMet ? "var(--green)" : "var(--yellow)", fontWeight: 700 }}>
-          Quorum {quorumPct.toFixed(0)}% {quorumMet ? "✓" : "—"}
-        </span>
       </div>
     </div>
   );
@@ -169,7 +166,7 @@ export default function GovernancePage() {
       {/* Header */}
       <div style={{ marginBottom: 28 }}>
         <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 4, letterSpacing: "-0.3px" }}>Governance</h1>
-        <p style={{ fontSize: 13, color: "var(--text-muted)" }}>
+        <p style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 700 }}>
           Vote on network parameters with staked LOCK. Proposals pass at 60% with 10M LOCK quorum.
         </p>
       </div>
@@ -178,7 +175,7 @@ export default function GovernancePage() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 24 }}>
         {[
           { label: "YOUR VOTING POWER",    value: `${votingPower.toLocaleString()} LOCK`,  accent: "var(--orange)" },
-          { label: "ACTIVE PROPOSALS",     value: activeProposals.length.toString(),        accent: "var(--green)" },
+          { label: "ACTIVE PROPOSALS",     value: activeProposals.length.toString(),        accent: "var(--text-primary)" },
           { label: "QUORUM THRESHOLD",     value: "10M LOCK",                               accent: "var(--text-primary)" },
           { label: "TIME-LOCK DELAY",      value: "48h",                                    accent: "var(--text-secondary)" },
         ].map((s) => (
@@ -203,13 +200,13 @@ export default function GovernancePage() {
           const myVote = votes[p.id];
           const isExpanded = expanded === p.id;
           return (
-            <div key={p.id} className="card" style={{ border: p.status === "active" ? "1px solid rgba(0,220,100,0.15)" : "1px solid var(--border)" }}>
+            <div key={p.id} className="card" style={{ border: "1px solid var(--border)" }}>
               <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
                 <div style={{ flex: 1, cursor: "pointer" }} onClick={() => setExpanded(isExpanded ? null : p.id)}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
                     <StatusBadge status={p.status} />
                     <CategoryBadge cat={p.category} />
-                    <span style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: "auto" }}>
+                    <span style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: "auto", fontWeight: 700 }}>
                       {p.status === "active" ? `Ends in ${p.endsAt}` : p.endsAt}
                     </span>
                   </div>
@@ -217,7 +214,7 @@ export default function GovernancePage() {
                     {p.title}
                   </div>
                   {isExpanded && (
-                    <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.7, marginBottom: 14 }}>
+                    <div style={{ fontSize: 13, color: "var(--text-secondary)", lineHeight: 1.7, marginBottom: 14, fontWeight: 700 }}>
                       {p.description}
                     </div>
                   )}
@@ -237,9 +234,9 @@ export default function GovernancePage() {
                           disabled={!connected}
                           style={{
                             padding: "6px 12px", borderRadius: 5, cursor: connected ? "pointer" : "not-allowed",
-                            border: `1px solid ${isMyVote ? colors[choice] : "var(--border)"}`,
-                            background: isMyVote ? `${colors[choice]}14` : "transparent",
-                            color: isMyVote ? colors[choice] : "var(--text-muted)",
+                            border: "1px solid #FFFFFF",
+                            background: isMyVote ? "#FFFFFF" : "rgba(255,255,255,0.06)",
+                            color: isMyVote ? "#000000" : "#FFFFFF",
                             fontSize: 11, fontWeight: 700, textTransform: "capitalize",
                             transition: "all 0.12s",
                             opacity: connected ? 1 : 0.5,

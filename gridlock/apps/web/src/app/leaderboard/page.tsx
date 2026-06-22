@@ -79,7 +79,7 @@ export default function LeaderboardPage() {
         <div>
           <div style={{ fontSize: 10, color: "var(--orange)", fontWeight: 700, letterSpacing: "1px", marginBottom: 6 }}>SEASON {season.number}</div>
           <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 4 }}>GridPoints Leaderboard</div>
-          <div style={{ fontSize: 13, color: "var(--text-muted)" }}>Earn GridPoints by serving fast. Converts to LOCK at TGE.</div>
+          <div style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 700 }}>Earn GridPoints by serving fast. Converts to LOCK at TGE.</div>
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>Season ends in</div>
@@ -99,7 +99,7 @@ export default function LeaderboardPage() {
             <div style={{ fontSize: 10, fontWeight: 900, color: "var(--orange)", paddingTop: 2 }}>{c.n}</div>
             <div>
               <div style={{ fontWeight: 700, marginBottom: 4, fontSize: 13 }}>{c.title}</div>
-              <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.5 }}>{c.desc}</div>
+              <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.5, fontWeight: 700 }}>{c.desc}</div>
             </div>
           </div>
         ))}
