@@ -360,7 +360,7 @@ export default function ConsolePage() {
               { label: "SLA PASS RATE",      value: realStats ? `${realStats.sla_pass_rate}%`                    : "…", accent: passRate >= 99 ? "var(--green)" : passRate >= 96 ? "var(--yellow)" : "var(--red)" },
               { label: "P99 TTFT",           value: realStats ? `${realStats.p99_ttft_ms}ms`                    : "…", accent: "var(--text-primary)" },
               { label: "PENALTIES CREDITED", value: realStats ? `${realStats.total_penalties_lock.toFixed(4)} LOCK` : "…", accent: "var(--orange)" },
-              { label: "CONFIDENTIAL",       value: realStats ? `${realStats.confidential_share}%`              : "…", accent: "var(--purple)" },
+              { label: "CONFIDENTIAL",       value: realStats ? `${realStats.confidential_share}%`              : "…", accent: "var(--text-primary)" },
             ].map((s) => (
               <div key={s.label} className="card">
                 <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 10 }}>{s.label}</div>
