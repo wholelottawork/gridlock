@@ -82,6 +82,18 @@ main { position: relative; z-index: 1; }
   100% { background-position:  200% center; }
 }
 
+@keyframes shimmer-chaos {
+  0%   { background-position: 0% center; }
+  12%  { background-position: 40% center; }
+  28%  { background-position: 15% center; }
+  42%  { background-position: 70% center; }
+  55%  { background-position: 45% center; }
+  67%  { background-position: 90% center; }
+  78%  { background-position: 60% center; }
+  90%  { background-position: 100% center; }
+  100% { background-position: 80% center; }
+}
+
 /* ── Scan line ───────────────────────────────────────────────────────────── */
 @keyframes scan {
   from { transform: translateY(-100%); }
@@ -90,12 +102,17 @@ main { position: relative; z-index: 1; }
 
 /* ── Gradient text — bright white shimmer ────────────────────────────────── */
 .gradient-text {
-  background: linear-gradient(135deg, #FFFFFF 0%, #444444 35%, #FFFFFF 55%, #555555 75%, #FFFFFF 100%);
-  background-size: 250% auto;
+  background: linear-gradient(90deg,
+    #333 0%, #fff 12%, #444 22%,
+    #fff 35%, #333 45%,
+    #666 55%, #fff 67%,
+    #444 77%, #fff 88%, #333 100%
+  );
+  background-size: 400% auto;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
-  animation: shimmer 2.5s linear infinite;
+  animation: shimmer-chaos 5s ease-in-out infinite alternate;
 }
 
 /* ── Card base ───────────────────────────────────────────────────────────── */
