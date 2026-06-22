@@ -90,7 +90,7 @@ main { position: relative; z-index: 1; }
 
 /* ── Gradient text — bright white shimmer ────────────────────────────────── */
 .gradient-text {
-  background: linear-gradient(135deg, #FFFFFF 0%, #AAAAAA 35%, #FFFFFF 55%, #CCCCCC 75%, #FFFFFF 100%);
+  background: linear-gradient(135deg, #FFFFFF 0%, #444444 35%, #FFFFFF 55%, #555555 75%, #FFFFFF 100%);
   background-size: 250% auto;
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
