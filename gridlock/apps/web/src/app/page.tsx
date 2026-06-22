@@ -1,10 +1,10 @@
-"use client";
+﻿"use client";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getNetworkStats, type NetworkStats } from "@/lib/mock-data";
 
-/* ── Animated counter ─────────────────────────────────────────────────────── */
+/* в”Ђв”Ђ Animated counter в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 function Counter({ to, suffix = "", decimals = 0 }: { to: number; suffix?: string; decimals?: number }) {
   const [val, setVal] = useState(0);
   const started = useRef(false);
@@ -24,13 +24,13 @@ function Counter({ to, suffix = "", decimals = 0 }: { to: number; suffix?: strin
   return <>{decimals ? val.toFixed(decimals) : val.toLocaleString()}{suffix}</>;
 }
 
-/* ── Live ticker ──────────────────────────────────────────────────────────── */
+/* в”Ђв”Ђ Live ticker в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 function StatTicker({ stats }: { stats: NetworkStats }) {
   const items = [
     { label: "SLA PASS RATE",     value: `${stats.slaPassRate}%` },
     { label: "ACTIVE WORKERS",    value: stats.activeworkers.toLocaleString() },
     { label: "P99 TTFT",          value: `${stats.p99TtftMs}ms` },
-    { label: "PENALTIES PAID",    value: `${stats.totalPenaltiesPaid.toLocaleString()} LOCK` },
+    { label: "PENALTIES PAID",    value: `${stats.totalPenaltiesPaid.toLocaleString()} $LOCK` },
     { label: "REQUESTS TODAY",    value: stats.requestsToday.toLocaleString() },
     { label: "CONFIDENTIAL JOBS", value: `${stats.confidentialShare}%` },
     { label: "TEE WORKERS",       value: stats.teeWorkers.toLocaleString() },
@@ -51,7 +51,7 @@ function StatTicker({ stats }: { stats: NetworkStats }) {
   );
 }
 
-/* ── Code block ───────────────────────────────────────────────────────────── */
+/* в”Ђв”Ђ Code block в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
 function CodeBlock({ lines }: { lines: { text: string; dim?: boolean; indent?: number }[] }) {
   const [copied, setCopied] = useState(false);
   const full = lines.map((l) => l.text).join("\n");
@@ -65,7 +65,7 @@ function CodeBlock({ lines }: { lines: { text: string; dim?: boolean; indent?: n
           {["#ff5f57","#febc2e","#28c840"].map((c) => <div key={c} style={{ width: 10, height: 10, borderRadius: "50%", background: c }} />)}
         </div>
         <button onClick={copy} style={{ background: "none", border: "none", color: copied ? "var(--green)" : "var(--text-muted)", fontSize: 11, cursor: "pointer", fontWeight: 700 }}>
-          {copied ? "COPIED ✓" : "COPY"}
+          {copied ? "COPIED вњ“" : "COPY"}
         </button>
       </div>
       <div style={{ padding: "20px 24px", fontFamily: "monospace", fontSize: 13, lineHeight: 2 }}>
@@ -82,10 +82,10 @@ function CodeBlock({ lines }: { lines: { text: string; dim?: boolean; indent?: n
 type Role = "customer" | "worker";
 
 const slaTiers = [
-  { tier: "REALTIME",     ttft: "300ms",  penalty: "2× fee",     use: "Chatbots, voice agents",          color: "var(--orange)" },
-  { tier: "STANDARD",     ttft: "800ms",  penalty: "1× fee",     use: "RAG apps, copilots",              color: "var(--text-primary)" },
-  { tier: "BATCH",        ttft: "5s",     penalty: "0.25× fee",  use: "Summarization, embeddings",       color: "var(--text-secondary)" },
-  { tier: "CONFIDENTIAL", ttft: "800ms",  penalty: "1× + slash", use: "Enterprise / private prompts",    color: "var(--purple)" },
+  { tier: "REALTIME",     ttft: "300ms",  penalty: "2Г— fee",     use: "Chatbots, voice agents",          color: "var(--orange)" },
+  { tier: "STANDARD",     ttft: "800ms",  penalty: "1Г— fee",     use: "RAG apps, copilots",              color: "var(--text-primary)" },
+  { tier: "BATCH",        ttft: "5s",     penalty: "0.25Г— fee",  use: "Summarization, embeddings",       color: "var(--text-secondary)" },
+  { tier: "CONFIDENTIAL", ttft: "800ms",  penalty: "1Г— + slash", use: "Enterprise / private prompts",    color: "var(--purple)" },
 ];
 
 const competitors = [
@@ -100,7 +100,7 @@ const competitors = [
 function CellVal({ v }: { v: boolean | string }) {
   if (v === true)      return <span style={{ color: "var(--orange)",  fontWeight: 800, fontSize: 13 }}>YES</span>;
   if (v === "partial") return <span style={{ color: "var(--text-secondary)", fontWeight: 600, fontSize: 13 }}>PART</span>;
-  return <span style={{ color: "var(--bg-4)", fontWeight: 600, fontSize: 13 }}>—</span>;
+  return <span style={{ color: "var(--bg-4)", fontWeight: 600, fontSize: 13 }}>вЂ”</span>;
 }
 
 const fadeUp = { hidden: { opacity: 0, y: 18 }, show: { opacity: 1, y: 0 } };
@@ -117,7 +117,7 @@ export default function LandingPage() {
 
   return (
     <div>
-      {/* ── Role Switcher ─────────────────────────────────────────────────── */}
+      {/* в”Ђв”Ђ Role Switcher в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */}
       <section style={{ maxWidth: 1280, margin: "0 auto", padding: "56px 24px 0" }}>
         <div style={{ textAlign: "center", marginBottom: 16 }}>
           <div style={{ fontSize: 14, color: "var(--text-primary)", fontWeight: 900, letterSpacing: "2px", marginBottom: 20 }}>WHO ARE YOU?</div>
@@ -146,14 +146,14 @@ export default function LandingPage() {
             <motion.p key={role} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.2 }}
               style={{ fontSize: 14, color: "var(--text-secondary)", fontWeight: 700, maxWidth: 520, margin: "12px auto 0" }}>
               {role === "customer"
-                ? "Use AI with a speed guarantee. If the response is late, you get paid back automatically — no complaints, no forms."
-                : "Plug in your GPU, run the worker software, and earn LOCK tokens for every AI request you process on time."}
+                ? "Use AI with a speed guarantee. If the response is late, you get paid back automatically вЂ” no complaints, no forms."
+                : "Plug in your GPU, run the worker software, and earn $LOCK tokens for every AI request you process on time."}
             </motion.p>
           </AnimatePresence>
         </div>
       </section>
 
-      {/* ── Hero ──────────────────────────────────────────────────────────── */}
+      {/* в”Ђв”Ђ Hero в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */}
       <section style={{ maxWidth: 1280, margin: "0 auto", padding: "52px 24px 72px" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 80, alignItems: "center" }}>
           <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}>
@@ -165,20 +165,20 @@ export default function LandingPage() {
                       AI that pays you back<br />if it&apos;s <span className="gradient-text">too slow</span>
                     </h1>
                     <p style={{ fontSize: 16, color: "var(--text-secondary)", fontWeight: 700, lineHeight: 1.8, marginBottom: 36, maxWidth: 480 }}>
-                      Pick a speed tier. If the AI responds too slowly, money is automatically sent from the worker&apos;s wallet to yours — no waiting, no dispute, no customer support.
+                      Pick a speed tier. If the AI responds too slowly, money is automatically sent from the worker&apos;s wallet to yours вЂ” no waiting, no dispute, no customer support.
                     </p>
                     <div style={{ display: "flex", gap: 12 }}>
-                      <Link href="/console" className="btn btn-primary" style={{ fontSize: 14 }}>Start Using AI →</Link>
+                      <Link href="/console" className="btn btn-primary" style={{ fontSize: 14 }}>Start Using AI в†’</Link>
                       <Link href="/docs" className="btn btn-ghost" style={{ fontSize: 14 }}>Read the Docs</Link>
                     </div>
                   </>
                 ) : (
                   <>
                     <h1 style={{ fontSize: 52, fontWeight: 900, lineHeight: 1.05, marginBottom: 22, letterSpacing: "-1.5px" }}>
-                      Your GPU earns<br /><span style={{ color: "var(--green)" }}>LOCK</span> while it runs AI
+                      Your GPU earns<br /><span style={{ color: "var(--green)" }}>$LOCK</span> while it runs AI
                     </h1>
                     <p style={{ fontSize: 16, color: "var(--text-secondary)", lineHeight: 1.8, marginBottom: 36, maxWidth: 480 }}>
-                      Install the worker software, point it at your GPU, stake some LOCK as collateral, and start earning per request. Hit your SLA targets and your stake grows — miss them and a small penalty is auto-deducted.
+                      Install the worker software, point it at your GPU, stake some $LOCK as collateral, and start earning per request. Hit your SLA targets and your stake grows вЂ” miss them and a small penalty is auto-deducted.
                     </p>
                     <div style={{ display: "flex", gap: 12 }}>
                       <Link href="/worker" className="btn" style={{ fontSize: 14, background: "var(--green)", color: "#000", border: "none", padding: "10px 24px", borderRadius: 6, fontWeight: 800 }}>Open Worker Dashboard</Link>
@@ -190,12 +190,12 @@ export default function LandingPage() {
             </AnimatePresence>
           </motion.div>
 
-          {/* Right — stat cards */}
+          {/* Right вЂ” stat cards */}
           <motion.div variants={stagger} initial="hidden" animate="show" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             {[
               { label: "SLA PASS RATE",  to: stats.slaPassRate,        suffix: "%",     decimals: 1, accent: true },
               { label: "P99 TTFT",       to: stats.p99TtftMs,          suffix: "ms",    decimals: 0, accent: false },
-              { label: "PENALTIES PAID", to: stats.totalPenaltiesPaid, suffix: " LOCK", decimals: 0, accent: true },
+              { label: "PENALTIES PAID", to: stats.totalPenaltiesPaid, suffix: " $LOCK", decimals: 0, accent: true },
               { label: "ACTIVE WORKERS", to: stats.activeworkers,      suffix: "",      decimals: 0, accent: false },
             ].map((c) => (
               <motion.div key={c.label} variants={fadeUp} transition={{ duration: 0.5 }}
@@ -213,14 +213,14 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Plain English Explainer ────────────────────────────────────────── */}
+      {/* в”Ђв”Ђ Plain English Explainer в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */}
       <section style={{ borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)", background: "var(--bg-1)" }}>
         <div style={{ maxWidth: 1280, margin: "0 auto", padding: "72px 24px" }}>
           <div style={{ textAlign: "center", marginBottom: 52 }}>
             <div style={{ fontSize: 11, color: "var(--orange)", fontWeight: 700, letterSpacing: "1.5px", marginBottom: 14 }}>IN PLAIN ENGLISH</div>
             <h2 style={{ fontSize: 32, fontWeight: 800, letterSpacing: "-0.5px", marginBottom: 16 }}>What is Gridlock, really?</h2>
             <p style={{ color: "var(--text-secondary)", fontSize: 15, maxWidth: 620, margin: "0 auto", lineHeight: 1.8 }}>
-              Think of it like <strong style={{ color: "var(--text-primary)" }}>Uber for AI compute</strong> — but the car has a guaranteed arrival time, and if it&apos;s late, you automatically get a refund.
+              Think of it like <strong style={{ color: "var(--text-primary)" }}>Uber for AI compute</strong> вЂ” but the car has a guaranteed arrival time, and if it&apos;s late, you automatically get a refund.
             </p>
           </div>
 
@@ -234,12 +234,12 @@ export default function LandingPage() {
               {
                 icon: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>,
                 title: "Speed is guaranteed by code",
-                body: "When you request AI, you pick a speed tier. The worker's LOCK tokens are locked as collateral. If the AI is too slow, the blockchain automatically moves tokens from the worker's wallet to yours. No humans involved.",
+                body: "When you request AI, you pick a speed tier. The worker's $LOCK tokens are locked as collateral. If the AI is too slow, the blockchain automatically moves tokens from the worker's wallet to yours. No humans involved.",
               },
               {
                 icon: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>,
                 title: "No one controls it",
-                body: "Everything runs on Solana — a public blockchain. There is no company in the middle that can raise prices, cut you off, or disappear. The rules are written in code that anyone can read.",
+                body: "Everything runs on Solana вЂ” a public blockchain. There is no company in the middle that can raise prices, cut you off, or disappear. The rules are written in code that anyone can read.",
               },
             ].map((c) => (
               <motion.div key={c.title} initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.45 }}
@@ -267,7 +267,7 @@ export default function LandingPage() {
                 { label: "Penalty or payment", sub: "settled automatically", color: "var(--orange)" },
               ].map((item, i) =>
                 item === null ? (
-                  <div key={i} style={{ color: "var(--border-2)", fontSize: 18, padding: "0 8px" }}>→</div>
+                  <div key={i} style={{ color: "var(--border-2)", fontSize: 18, padding: "0 8px" }}>в†’</div>
                 ) : (
                   <div key={i} style={{ background: "var(--bg-3)", border: "1px solid var(--border)", borderRadius: 8, padding: "12px 16px", minWidth: 130 }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: item.color, marginBottom: 3 }}>{item.label}</div>
@@ -280,7 +280,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Role-specific content ──────────────────────────────────────────── */}
+      {/* в”Ђв”Ђ Role-specific content в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */}
       <AnimatePresence mode="wait">
         {role === "customer" ? (
           <motion.div key="customer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
@@ -292,7 +292,7 @@ export default function LandingPage() {
                   <div style={{ fontSize: 11, color: "var(--orange)", fontWeight: 700, letterSpacing: "1px", marginBottom: 14 }}>FOR DEVELOPERS</div>
                   <h2 style={{ fontSize: 30, fontWeight: 800, marginBottom: 16, letterSpacing: "-0.5px" }}>One URL change. Guaranteed latency.</h2>
                   <p style={{ color: "var(--text-secondary)", lineHeight: 1.8, marginBottom: 28, fontSize: 15 }}>
-                    Gridlock is a drop-in replacement for the OpenAI API. If the request misses your SLA target, the penalty is auto-credited on-chain — no dispute, no claim, no waiting.
+                    Gridlock is a drop-in replacement for the OpenAI API. If the request misses your SLA target, the penalty is auto-credited on-chain вЂ” no dispute, no claim, no waiting.
                   </p>
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                     {[
@@ -333,7 +333,7 @@ export default function LandingPage() {
                 <div style={{ textAlign: "center", marginBottom: 48 }}>
                   <div style={{ fontSize: 11, color: "var(--orange)", fontWeight: 700, letterSpacing: "1.5px", marginBottom: 14 }}>SPEED TIERS</div>
                   <h2 style={{ fontSize: 30, fontWeight: 800, letterSpacing: "-0.5px" }}>Pick how fast you need it</h2>
-                  <p style={{ color: "var(--text-secondary)", marginTop: 12, fontSize: 14 }}>Miss the target — penalty auto-pays from worker stake directly to your wallet.</p>
+                  <p style={{ color: "var(--text-secondary)", marginTop: 12, fontSize: 14 }}>Miss the target вЂ” penalty auto-pays from worker stake directly to your wallet.</p>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
                   {slaTiers.map((t, i) => (
@@ -356,7 +356,7 @@ export default function LandingPage() {
           </motion.div>
         ) : (
 
-          /* ── WORKER PATH ─────────────────────────────────────────────────── */
+          /* в”Ђв”Ђ WORKER PATH в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
           <motion.div key="worker" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
 
             {/* How it works for workers */}
@@ -371,8 +371,8 @@ export default function LandingPage() {
                 {[
                   { n: "01", title: "Install vLLM",         color: "var(--green)",  desc: "vLLM is the open-source software that actually runs the AI model on your GPU. It's what turns your hardware into an inference server." },
                   { n: "02", title: "Install Gridlock Worker", color: "var(--green)", desc: "The Gridlock worker agent connects your vLLM server to the network. It handles job routing, SLA tracking, heartbeats, and payments." },
-                  { n: "03", title: "Stake LOCK tokens",    color: "var(--orange)", desc: "Stake LOCK as collateral to signal you're serious. The more you stake, the more earnings multiplier you get. Minimum 1,000 LOCK for Batch tier." },
-                  { n: "04", title: "Start earning",        color: "var(--orange)", desc: "Your worker goes live. Requests come in automatically. Hit your SLA target every time and your reliability score climbs — unlocking better-paying tiers." },
+                  { n: "03", title: "Stake $LOCK tokens",    color: "var(--orange)", desc: "Stake $LOCK as collateral to signal you're serious. The more you stake, the more earnings multiplier you get. Minimum 1,000 $LOCK for Batch tier." },
+                  { n: "04", title: "Start earning",        color: "var(--orange)", desc: "Your worker goes live. Requests come in automatically. Hit your SLA target every time and your reliability score climbs вЂ” unlocking better-paying tiers." },
                 ].map((s, i) => (
                   <motion.div key={s.n} initial={{ opacity: 0, y: 16 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ delay: i * 0.08 }}
                     style={{ background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 10, padding: "24px" }}>
@@ -386,7 +386,7 @@ export default function LandingPage() {
               {/* Setup commands */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                 <div>
-                  <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 10 }}>STEP 1 + 2 — INSTALL</div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 10 }}>STEP 1 + 2 вЂ” INSTALL</div>
                   <CodeBlock lines={[
                     { text: "# Install vLLM (requires CUDA GPU)", dim: true },
                     { text: "pip install vllm" },
@@ -400,7 +400,7 @@ export default function LandingPage() {
                   ]} />
                 </div>
                 <div>
-                  <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 10 }}>STEP 3 + 4 — REGISTER & START</div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 10 }}>STEP 3 + 4 вЂ” REGISTER & START</div>
                   <CodeBlock lines={[
                     { text: "# Register your worker on-chain", dim: true },
                     { text: "gridlock-worker register \\" },
@@ -409,7 +409,7 @@ export default function LandingPage() {
                     { text: "  --role Prefill \\", indent: 1 },
                     { text: "  --hardware H100", indent: 1 },
                     { text: "" },
-                    { text: "# Go live — jobs start arriving automatically", dim: true },
+                    { text: "# Go live вЂ” jobs start arriving automatically", dim: true },
                     { text: "gridlock-worker start" },
                   ]} />
                 </div>
@@ -426,11 +426,11 @@ export default function LandingPage() {
                     <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 20 }}>HARDWARE REQUIREMENTS</div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       {[
-                        { gpu: "NVIDIA RTX 4090",  tier: "Batch + Standard",           stake: "1K LOCK",  earnings: "~12 LOCK/day",  status: "ok" },
-                        { gpu: "NVIDIA RTX 3090",  tier: "Batch",                       stake: "1K LOCK",  earnings: "~6 LOCK/day",   status: "ok" },
-                        { gpu: "NVIDIA A100",      tier: "Batch + Standard + Realtime", stake: "15K LOCK", earnings: "~80 LOCK/day",  status: "ok" },
-                        { gpu: "NVIDIA H100",      tier: "All tiers + Confidential",    stake: "20K LOCK", earnings: "~200 LOCK/day", status: "tee" },
-                        { gpu: "AMD RX 7900 XTX",  tier: "Batch only (ROCm)",           stake: "1K LOCK",  earnings: "~4 LOCK/day",   status: "ok" },
+                        { gpu: "NVIDIA RTX 4090",  tier: "Batch + Standard",           stake: "1K $LOCK",  earnings: "~12 $LOCK/day",  status: "ok" },
+                        { gpu: "NVIDIA RTX 3090",  tier: "Batch",                       stake: "1K $LOCK",  earnings: "~6 $LOCK/day",   status: "ok" },
+                        { gpu: "NVIDIA A100",      tier: "Batch + Standard + Realtime", stake: "15K $LOCK", earnings: "~80 $LOCK/day",  status: "ok" },
+                        { gpu: "NVIDIA H100",      tier: "All tiers + Confidential",    stake: "20K $LOCK", earnings: "~200 $LOCK/day", status: "tee" },
+                        { gpu: "AMD RX 7900 XTX",  tier: "Batch only (ROCm)",           stake: "1K $LOCK",  earnings: "~4 $LOCK/day",   status: "ok" },
                       ].map((r) => (
                         <div key={r.gpu} style={{ display: "flex", alignItems: "center", gap: 12, background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 8, padding: "14px 16px" }}>
                           <div style={{ flex: 1 }}>
@@ -457,9 +457,9 @@ export default function LandingPage() {
                     <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 20 }}>HOW WORKERS EARN</div>
                     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                       {[
-                        { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>, title: "Per-request fees",      desc: "Customers pay in LOCK for every completed request. Higher SLA tiers pay more. Hit your target time and you keep 20% of the network fee." },
-                        { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>, title: "Reliability bonus",     desc: "Your reliability score (0–10,000) determines job priority. Score above 9,500 unlocks Realtime tier — the highest-paying tier." },
-                        { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>, title: "Staking multiplier",    desc: "Stake 15K+ LOCK → 2× earnings multiplier. Stake 50K+ LOCK → 3× multiplier. Your stake also earns 8% APY on its own." },
+                        { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>, title: "Per-request fees",      desc: "Customers pay in $LOCK for every completed request. Higher SLA tiers pay more. Hit your target time and you keep 20% of the network fee." },
+                        { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>, title: "Reliability bonus",     desc: "Your reliability score (0вЂ“10,000) determines job priority. Score above 9,500 unlocks Realtime tier вЂ” the highest-paying tier." },
+                        { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>, title: "Staking multiplier",    desc: "Stake 15K+ $LOCK в†’ 2Г— earnings multiplier. Stake 50K+ $LOCK в†’ 3Г— multiplier. Your stake also earns 8% APY on its own." },
                         { icon: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>, title: "Confidential premium",  desc: "H100 workers with TEE mode enabled earn a premium on top of standard fees for encrypting prompts inside the secure hardware enclave." },
                       ].map((item) => (
                         <div key={item.title} style={{ display: "flex", gap: 14, padding: "16px", background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 8 }}>
@@ -480,7 +480,7 @@ export default function LandingPage() {
         )}
       </AnimatePresence>
 
-      {/* ── Comparison table (always visible) ────────────────────────────── */}
+      {/* в”Ђв”Ђ Comparison table (always visible) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */}
       <section style={{ borderTop: "1px solid var(--border)", background: role === "worker" ? "var(--bg-0)" : "var(--bg-1)" }}>
         <div style={{ maxWidth: 1280, margin: "0 auto", padding: "72px 24px" }}>
           <div style={{ textAlign: "center", marginBottom: 48 }}>
@@ -513,7 +513,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Footer CTA ────────────────────────────────────────────────────── */}
+      {/* в”Ђв”Ђ Footer CTA в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */}
       <motion.section initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.55 }}
         style={{ maxWidth: 1280, margin: "0 auto", padding: "88px 24px", textAlign: "center" }}>
         <h2 style={{ fontSize: 42, fontWeight: 900, marginBottom: 16, letterSpacing: "-1px" }}>
@@ -522,7 +522,7 @@ export default function LandingPage() {
         <p style={{ color: "var(--text-secondary)", fontSize: 16, marginBottom: 40, maxWidth: 520, margin: "0 auto 40px" }}>
           {role === "customer"
             ? "Change one URL. Add one field. Get a latency guarantee backed by real money."
-            : "Install two packages. Register in 60 seconds. Your GPU earns LOCK around the clock."}
+            : "Install two packages. Register in 60 seconds. Your GPU earns $LOCK around the clock."}
         </p>
         <div style={{ display: "flex", gap: 14, justifyContent: "center" }}>
           {role === "customer" ? (
@@ -533,7 +533,7 @@ export default function LandingPage() {
           ) : (
             <>
               <Link href="/worker" className="btn" style={{ padding: "14px 36px", fontSize: 15, background: "var(--green)", color: "#000", border: "none", borderRadius: 6, fontWeight: 800 }}>Worker Dashboard</Link>
-              <Link href="/stake" className="btn btn-ghost" style={{ padding: "14px 36px", fontSize: 15 }}>Stake LOCK</Link>
+              <Link href="/stake" className="btn btn-ghost" style={{ padding: "14px 36px", fontSize: 15 }}>Stake $LOCK</Link>
             </>
           )}
         </div>
