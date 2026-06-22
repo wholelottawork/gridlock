@@ -120,7 +120,7 @@ export default function LandingPage() {
       {/* ── Role Switcher ─────────────────────────────────────────────────── */}
       <section style={{ maxWidth: 1280, margin: "0 auto", padding: "56px 24px 0" }}>
         <div style={{ textAlign: "center", marginBottom: 16 }}>
-          <div style={{ fontSize: 12, color: "var(--text-muted)", fontWeight: 600, letterSpacing: "1px", marginBottom: 20 }}>WHO ARE YOU?</div>
+          <div style={{ fontSize: 14, color: "var(--text-primary)", fontWeight: 900, letterSpacing: "2px", marginBottom: 20 }}>WHO ARE YOU?</div>
           <div style={{ display: "inline-flex", gap: 0, background: "var(--bg-2)", border: "1px solid var(--border)", borderRadius: 10, padding: 4 }}>
             {(["customer", "worker"] as Role[]).map((r) => (
               <button
