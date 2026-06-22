@@ -1,10 +1,10 @@
-﻿"use client";
+"use client";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { getNetworkStats, type NetworkStats } from "@/lib/mock-data";
 
-/* в”Ђв”Ђ Animated counter в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
+/* ── Animated counter ─────────────────────────────────────────────────────── */
 function Counter({ to, suffix = "", decimals = 0 }: { to: number; suffix?: string; decimals?: number }) {
   const [val, setVal] = useState(0);
   const started = useRef(false);
@@ -24,7 +24,7 @@ function Counter({ to, suffix = "", decimals = 0 }: { to: number; suffix?: strin
   return <>{decimals ? val.toFixed(decimals) : val.toLocaleString()}{suffix}</>;
 }
 
-/* в”Ђв”Ђ Live ticker в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
+/* ── Live ticker ──────────────────────────────────────────────────────────── */
 function StatTicker({ stats }: { stats: NetworkStats }) {
   const items = [
     { label: "SLA PASS RATE",     value: `${stats.slaPassRate}%` },
@@ -51,7 +51,7 @@ function StatTicker({ stats }: { stats: NetworkStats }) {
   );
 }
 
-/* в”Ђв”Ђ Code block в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
+/* ── Code block ───────────────────────────────────────────────────────────── */
 function CodeBlock({ lines }: { lines: { text: string; dim?: boolean; indent?: number }[] }) {
   const [copied, setCopied] = useState(false);
   const full = lines.map((l) => l.text).join("\n");
@@ -117,7 +117,7 @@ export default function LandingPage() {
 
   return (
     <div>
-      {/* в”Ђв”Ђ Role Switcher в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */}
+      {/* ── Role Switcher ─────────────────────────────────────────────────── */}
       <section style={{ maxWidth: 1280, margin: "0 auto", padding: "56px 24px 0" }}>
         <div style={{ textAlign: "center", marginBottom: 16 }}>
           <div style={{ fontSize: 14, color: "var(--text-primary)", fontWeight: 900, letterSpacing: "2px", marginBottom: 20 }}>WHO ARE YOU?</div>
@@ -153,7 +153,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* в”Ђв”Ђ Hero в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */}
+      {/* ── Hero ──────────────────────────────────────────────────────────── */}
       <section style={{ maxWidth: 1280, margin: "0 auto", padding: "52px 24px 72px" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 80, alignItems: "center" }}>
           <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}>
@@ -213,7 +213,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* в”Ђв”Ђ Plain English Explainer в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */}
+      {/* ── Plain English Explainer ────────────────────────────────────────── */}
       <section style={{ borderTop: "1px solid var(--border)", borderBottom: "1px solid var(--border)", background: "var(--bg-1)" }}>
         <div style={{ maxWidth: 1280, margin: "0 auto", padding: "72px 24px" }}>
           <div style={{ textAlign: "center", marginBottom: 52 }}>
@@ -280,7 +280,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* в”Ђв”Ђ Role-specific content в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */}
+      {/* ── Role-specific content ──────────────────────────────────────────── */}
       <AnimatePresence mode="wait">
         {role === "customer" ? (
           <motion.div key="customer" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
@@ -356,7 +356,7 @@ export default function LandingPage() {
           </motion.div>
         ) : (
 
-          /* в”Ђв”Ђ WORKER PATH в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */
+          /* ── WORKER PATH ─────────────────────────────────────────────────── */
           <motion.div key="worker" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
 
             {/* How it works for workers */}
@@ -480,7 +480,7 @@ export default function LandingPage() {
         )}
       </AnimatePresence>
 
-      {/* в”Ђв”Ђ Comparison table (always visible) в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */}
+      {/* ── Comparison table (always visible) ────────────────────────────── */}
       <section style={{ borderTop: "1px solid var(--border)", background: role === "worker" ? "var(--bg-0)" : "var(--bg-1)" }}>
         <div style={{ maxWidth: 1280, margin: "0 auto", padding: "72px 24px" }}>
           <div style={{ textAlign: "center", marginBottom: 48 }}>
@@ -513,7 +513,7 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* в”Ђв”Ђ Footer CTA в”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђв”Ђ */}
+      {/* ── Footer CTA ────────────────────────────────────────────────────── */}
       <motion.section initial={{ opacity: 0, y: 20 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.55 }}
         style={{ maxWidth: 1280, margin: "0 auto", padding: "88px 24px", textAlign: "center" }}>
         <h2 style={{ fontSize: 42, fontWeight: 900, marginBottom: 16, letterSpacing: "-1px" }}>
