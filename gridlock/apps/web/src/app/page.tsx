@@ -144,7 +144,7 @@ export default function LandingPage() {
         <div style={{ textAlign: "center", marginBottom: 0 }}>
           <AnimatePresence mode="wait">
             <motion.p key={role} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.2 }}
-              style={{ fontSize: 14, color: "var(--text-muted)", maxWidth: 520, margin: "12px auto 0" }}>
+              style={{ fontSize: 14, color: "var(--text-secondary)", fontWeight: 700, maxWidth: 520, margin: "12px auto 0" }}>
               {role === "customer"
                 ? "Use AI with a speed guarantee. If the response is late, you get paid back automatically — no complaints, no forms."
                 : "Plug in your GPU, run the worker software, and earn LOCK tokens for every AI request you process on time."}
