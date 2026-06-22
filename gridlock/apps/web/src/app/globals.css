@@ -96,7 +96,6 @@ main { position: relative; z-index: 1; }
   -webkit-text-fill-color: transparent;
   background-clip: text;
   animation: shimmer 2.5s linear infinite;
-  filter: drop-shadow(0 0 18px rgba(255,255,255,0.55)) drop-shadow(0 0 6px rgba(255,255,255,0.9));
 }
 
 /* ── Card base ───────────────────────────────────────────────────────────── */
