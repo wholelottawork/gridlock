@@ -117,8 +117,6 @@ export default function LandingPage() {
 
   return (
     <div>
-      <StatTicker stats={stats} />
-
       {/* ── Role Switcher ─────────────────────────────────────────────────── */}
       <section style={{ maxWidth: 1280, margin: "0 auto", padding: "56px 24px 0" }}>
         <div style={{ textAlign: "center", marginBottom: 16 }}>
