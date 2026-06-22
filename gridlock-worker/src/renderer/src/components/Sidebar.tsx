@@ -111,7 +111,8 @@ export default function Sidebar({ page, setPage }: { page: Page; setPage: (p: Pa
         padding: '12px 18px',
         borderTop: '1px solid var(--border)',
         fontSize: 10,
-        color: 'var(--text-muted)',
+        fontWeight: 700,
+        color: 'var(--text-secondary)',
         letterSpacing: '0.5px',
       }}>
         gridlock.network · v0.1
