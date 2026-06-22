@@ -1,0 +1,37 @@
+{
+  "name": "gridlock-worker",
+  "version": "0.1.0",
+  "description": "Gridlock GPU Worker Desktop Client",
+  "main": "out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "package": "npm run build && electron-builder",
+    "preview": "electron-vite preview"
+  },
+  "build": {
+    "appId": "network.gridlock.worker",
+    "productName": "Gridlock Worker",
+    "directories": { "output": "release" },
+    "win": { "target": "nsis" },
+    "mac": { "target": "dmg" },
+    "linux": { "target": "AppImage" },
+    "extraResources": [{ "from": "python", "to": "python" }],
+    "files": ["out/**/*"]
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3",
+    "electron-vite": "^2.3.0",
+    "framer-motion": "^11.3.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "recharts": "^2.12.7",
+    "typescript": "^5.5.3",
+    "vite": "^5.3.4"
+  }
+}
