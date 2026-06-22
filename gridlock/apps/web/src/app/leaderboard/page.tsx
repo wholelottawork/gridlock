@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { generateWorkers, type Worker, type WorkerRole, type WorkerStatus } from "@/lib/mock-data";
@@ -79,7 +79,7 @@ export default function LeaderboardPage() {
         <div>
           <div style={{ fontSize: 10, color: "var(--orange)", fontWeight: 700, letterSpacing: "1px", marginBottom: 6 }}>SEASON {season.number}</div>
           <div style={{ fontSize: 22, fontWeight: 800, marginBottom: 4 }}>GridPoints Leaderboard</div>
-          <div style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 700 }}>Earn GridPoints by serving fast. Converts to LOCK at TGE.</div>
+          <div style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 700 }}>Earn GridPoints by serving fast. Converts to $LOCK at TGE.</div>
         </div>
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>Season ends in</div>
@@ -176,7 +176,7 @@ export default function LeaderboardPage() {
       </div>
 
       <div style={{ marginTop: 14, fontSize: 11, color: "var(--text-muted)", textAlign: "center" }}>
-        GridPoints convert to LOCK at TGE · 34% of total supply allocated to worker rewards
+        GridPoints convert to $LOCK at TGE · 34% of total supply allocated to worker rewards
       </div>
     </motion.div>
   );

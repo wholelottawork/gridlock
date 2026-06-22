@@ -1,11 +1,11 @@
-"use client";
+﻿"use client";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import { getAssociatedTokenAddressSync, getAccount, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 
-// Devnet LOCK mint — set after running scripts/create-lock-mint.ts
+// Devnet $LOCK mint — set after running scripts/create-lock-mint.ts
 const LOCK_MINT_DEVNET = process.env.NEXT_PUBLIC_LOCK_MINT ?? "";
 
 const multiplierTiers = [
@@ -32,17 +32,17 @@ export default function StakePage() {
 
   const [stakeAmount, setStakeAmount]   = useState("");
   const [unstakeAmount, setUnstakeAmount] = useState("");
-  const [lockBalance, setLockBalance]   = useState<number | null>(null);
+  const [lockBalance, setlockBalance]   = useState<number | null>(null);
   const [stakedLock, setStakedLock]     = useState<number | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [balanceError, setBalanceError]     = useState<string | null>(null);
 
   useEffect(() => { setMounted(true); }, []);
 
-  // Attempt to read LOCK token balance and staked amount from chain
+  // Attempt to read $LOCK token balance and staked amount from chain
   useEffect(() => {
     if (!publicKey || !LOCK_MINT_DEVNET) {
-      setLockBalance(null);
+      setlockBalance(null);
       setStakedLock(null);
       return;
     }
@@ -54,10 +54,10 @@ export default function StakePage() {
         const ata  = getAssociatedTokenAddressSync(mint, publicKey, false, TOKEN_2022_PROGRAM_ID);
         const acct = await getAccount(connection, ata, "confirmed", TOKEN_2022_PROGRAM_ID);
         const raw  = Number(acct.amount);
-        setLockBalance(raw / 1e9); // 9 decimals
+        setlockBalance(raw / 1e9); // 9 decimals
       } catch {
-        setLockBalance(0);
-        setBalanceError("LOCK token account not found — request devnet airdrop.");
+        setlockBalance(0);
+        setBalanceError("$LOCK token account not found — request devnet airdrop.");
       } finally {
         setBalanceLoading(false);
       }
@@ -80,14 +80,14 @@ export default function StakePage() {
       style={{ maxWidth: 1280, margin: "0 auto", padding: "32px 24px" }}>
 
       <div style={{ marginBottom: 28 }}>
-        <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 4, letterSpacing: "-0.3px" }}>Stake LOCK</h1>
-        <p style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 700 }}>Stake LOCK to earn 60% of all network penalties and unlock higher SLA tiers. 8% APY on staked balance.</p>
+        <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 4, letterSpacing: "-0.3px" }}>Stake $LOCK</h1>
+        <p style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 700 }}>Stake $LOCK to earn 60% of all network penalties and unlock higher SLA tiers. 8% APY on staked balance.</p>
       </div>
 
       {/* Wallet notices */}
       {isWalletRequired && (
         <div style={{ marginBottom: 20, padding: "12px 18px", borderRadius: 8, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.12)", fontSize: 13, color: "var(--text-primary)", fontWeight: 700 }}>
-          Connect your wallet (top right) to see your real LOCK balance and stake on-chain.
+          Connect your wallet (top right) to see your real $LOCK balance and stake on-chain.
         </div>
       )}
       {mounted && connected && balanceError && (
@@ -104,7 +104,7 @@ export default function StakePage() {
       {/* Summary row */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 24 }}>
         {[
-          { label: "YOUR STAKED LOCK",    value: balanceLoading ? "…" : displayStake.toLocaleString(), accent: "var(--orange)" },
+          { label: "YOUR STAKED $LOCK",    value: balanceLoading ? "…" : displayStake.toLocaleString(), accent: "var(--orange)" },
           { label: "WALLET BALANCE",      value: balanceLoading ? "…" : displayBalance.toLocaleString(), accent: "var(--text-primary)" },
           { label: "EARNINGS MULTIPLIER", value: currentTier.mult,  accent: currentTier.color },
           { label: "APY",                 value: "8%",               accent: "var(--green)" },
@@ -112,7 +112,7 @@ export default function StakePage() {
           <div key={s.label} className="card">
             <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 10 }}>{s.label}</div>
             <div style={{ fontSize: 28, fontWeight: 900, color: s.accent, letterSpacing: "-0.5px" }}>{s.value}</div>
-            {(s.label === "YOUR STAKED LOCK" || s.label === "WALLET BALANCE") && mounted && connected && !balanceLoading && (
+            {(s.label === "YOUR STAKED $LOCK" || s.label === "WALLET BALANCE") && mounted && connected && !balanceLoading && (
               <div style={{ fontSize: 10, color: "var(--green)", fontWeight: 700, marginTop: 6 }}>LIVE</div>
             )}
           </div>
@@ -151,23 +151,23 @@ export default function StakePage() {
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
         {/* Stake */}
         <div className="card">
-          <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 16 }}>STAKE LOCK</div>
+          <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 16 }}>STAKE $LOCK</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div>
               <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 6 }}>Amount</div>
               <div style={{ display: "flex", gap: 8 }}>
-                <input value={stakeAmount} onChange={(e) => setStakeAmount(e.target.value)} placeholder="0 LOCK" type="number" min="0" style={{ flex: 1 }} />
+                <input value={stakeAmount} onChange={(e) => setStakeAmount(e.target.value)} placeholder="0 $LOCK" type="number" min="0" style={{ flex: 1 }} />
                 <button onClick={() => setStakeAmount(String(displayBalance))} style={{ background: "var(--bg-3)", border: "1px solid var(--border)", borderRadius: 5, padding: "0 14px", color: "var(--text-secondary)", cursor: "pointer", fontSize: 12, fontWeight: 700 }}>MAX</button>
               </div>
-              <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 5 }}>Balance: {displayBalance.toLocaleString()} LOCK</div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 5 }}>Balance: {displayBalance.toLocaleString()} $LOCK</div>
             </div>
 
             {stakeNum > 0 && (
               <div style={{ background: "var(--orange-dim)", border: "1px solid var(--orange-border)", borderRadius: 6, padding: "12px" }}>
-                <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 6 }}>After staking {stakeNum.toLocaleString()} LOCK</div>
+                <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 6 }}>After staking {stakeNum.toLocaleString()} $LOCK</div>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
                   <span style={{ color: "var(--text-secondary)" }}>Total staked</span>
-                  <span style={{ color: "var(--orange)", fontWeight: 700 }}>{totalAfterStake.toLocaleString()} LOCK</span>
+                  <span style={{ color: "var(--orange)", fontWeight: 700 }}>{totalAfterStake.toLocaleString()} $LOCK</span>
                 </div>
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12 }}>
                   <span style={{ color: "var(--text-secondary)" }}>Multiplier tier</span>
@@ -181,28 +181,28 @@ export default function StakePage() {
               style={{ width: "100%", opacity: stakeNum > 0 && connected ? 1 : 1, background: "#FFFFFF", color: "#000000", borderColor: "#FFFFFF" }}
               disabled={!connected || stakeNum <= 0}
             >
-              {connected ? "Stake LOCK" : "Connect Wallet to Stake"}
+              {connected ? "Stake $LOCK" : "Connect Wallet to Stake"}
             </button>
             <div style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "center" }}>
-              Daily earnings at current stake: ~{dailyEarnings.toFixed(2)} LOCK/day
+              Daily earnings at current stake: ~{dailyEarnings.toFixed(2)} $LOCK/day
             </div>
           </div>
         </div>
 
         {/* Unstake */}
         <div className="card">
-          <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 16 }}>UNSTAKE LOCK</div>
+          <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 16 }}>UNSTAKE $LOCK</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
             <div>
               <div style={{ fontSize: 12, color: "var(--text-secondary)", marginBottom: 6 }}>Amount</div>
-              <input value={unstakeAmount} onChange={(e) => setUnstakeAmount(e.target.value)} placeholder="0 LOCK" type="number" min="0" style={{ width: "100%" }} />
-              <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 5 }}>Staked: {displayStake.toLocaleString()} LOCK</div>
+              <input value={unstakeAmount} onChange={(e) => setUnstakeAmount(e.target.value)} placeholder="0 $LOCK" type="number" min="0" style={{ width: "100%" }} />
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 5 }}>Staked: {displayStake.toLocaleString()} $LOCK</div>
             </div>
 
             <div style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 6, padding: "12px" }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: "var(--red)", marginBottom: 4 }}>7-Day Cooldown</div>
               <div style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.6 }}>
-                5,000 LOCK locked as SLA collateral. Exit accepted SLA tiers before unstaking collateral. Pending unstake earns no APY.
+                5,000 $LOCK locked as SLA collateral. Exit accepted SLA tiers before unstaking collateral. Pending unstake earns no APY.
               </div>
             </div>
 
@@ -232,7 +232,7 @@ export default function StakePage() {
                 <div style={{ fontSize: 10, color: t.color, fontWeight: 700, letterSpacing: "0.5px", marginBottom: 6 }}>{t.label.toUpperCase()}</div>
                 <div style={{ fontSize: 28, fontWeight: 900, color: t.color }}>{t.mult}</div>
                 <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>
-                  {t.min === 0 ? `0 – ${(t.max / 1000).toFixed(0)}K` : `${(t.min / 1000).toFixed(0)}K+`} LOCK
+                  {t.min === 0 ? `0 – ${(t.max / 1000).toFixed(0)}K` : `${(t.min / 1000).toFixed(0)}K+`} $LOCK
                 </div>
                 {active && <div style={{ marginTop: 8, fontSize: 11, color: "var(--orange)", fontWeight: 700 }}>Current tier</div>}
               </div>
@@ -256,7 +256,7 @@ export default function StakePage() {
               return (
                 <tr key={row.tier}>
                   <td style={{ fontWeight: 700, color: row.tier === "Realtime" ? "var(--orange)" : row.tier === "Confidential" ? "var(--purple)" : "var(--text-primary)" }}>{row.tier}</td>
-                  <td style={{ color: "var(--orange)", fontWeight: 700 }}>{row.collateral.toLocaleString()} LOCK</td>
+                  <td style={{ color: "var(--orange)", fontWeight: 700 }}>{row.collateral.toLocaleString()} $LOCK</td>
                   <td style={{ color: "var(--text-secondary)" }}>{row.ttft}</td>
                   <td style={{ color: "var(--red)", fontWeight: 600 }}>{row.penalty}</td>
                   <td>

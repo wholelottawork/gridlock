@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useState } from "react";
 import { motion } from "framer-motion";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -91,7 +91,7 @@ const NETWORK_PARAMS = [
   { param: "Heartbeat timeout",            value: "120s",       controlled: "Governance vote" },
   { param: "Transfer hook fee",            value: "0.1%",       controlled: "Governance vote" },
   { param: "Interest bearing APY",         value: "8%",         controlled: "Governance vote" },
-  { param: "Quorum threshold",             value: "10M LOCK",   controlled: "Governance vote" },
+  { param: "Quorum threshold",             value: "10M $LOCK",   controlled: "Governance vote" },
   { param: "Passing threshold",            value: "60%",        controlled: "Governance vote" },
   { param: "Time-lock delay",              value: "48h",        controlled: "Governance vote" },
 ];
@@ -149,7 +149,7 @@ export default function GovernancePage() {
   const [votes, setVotes] = useState<Record<number, VoteChoice>>({});
   const [expanded, setExpanded] = useState<number | null>(7);
 
-  const votingPower = 25_000; // mock: staked LOCK balance
+  const votingPower = 25_000; // mock: staked $LOCK balance
 
   function handleVote(proposalId: number, choice: VoteChoice) {
     if (!connected) return;
@@ -167,16 +167,16 @@ export default function GovernancePage() {
       <div style={{ marginBottom: 28 }}>
         <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 4, letterSpacing: "-0.3px" }}>Governance</h1>
         <p style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 700 }}>
-          Vote on network parameters with staked LOCK. Proposals pass at 60% with 10M LOCK quorum.
+          Vote on network parameters with staked $LOCK. Proposals pass at 60% with 10M $LOCK quorum.
         </p>
       </div>
 
       {/* Stats row */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 24 }}>
         {[
-          { label: "YOUR VOTING POWER",    value: `${votingPower.toLocaleString()} LOCK`,  accent: "var(--orange)" },
+          { label: "YOUR VOTING POWER",    value: `${votingPower.toLocaleString()} $LOCK`,  accent: "var(--orange)" },
           { label: "ACTIVE PROPOSALS",     value: activeProposals.length.toString(),        accent: "var(--text-primary)" },
-          { label: "QUORUM THRESHOLD",     value: "10M LOCK",                               accent: "var(--text-primary)" },
+          { label: "QUORUM THRESHOLD",     value: "10M $LOCK",                               accent: "var(--text-primary)" },
           { label: "TIME-LOCK DELAY",      value: "48h",                                    accent: "var(--text-secondary)" },
         ].map((s) => (
           <div key={s.label} className="card">
@@ -188,7 +188,7 @@ export default function GovernancePage() {
 
       {!connected && (
         <div style={{ background: "var(--orange-dim)", border: "1px solid var(--orange-border)", borderRadius: 8, padding: "14px 18px", marginBottom: 24, fontSize: 13, color: "var(--orange)" }}>
-          Connect your wallet to vote. Your voting power equals your staked LOCK balance.
+          Connect your wallet to vote. Your voting power equals your staked $LOCK balance.
         </div>
       )}
 
@@ -248,7 +248,7 @@ export default function GovernancePage() {
                     })}
                     {myVote && (
                       <div style={{ fontSize: 10, color: "var(--text-muted)", textAlign: "center" }}>
-                        {votingPower.toLocaleString()} LOCK cast
+                        {votingPower.toLocaleString()} $LOCK cast
                       </div>
                     )}
                   </div>
@@ -303,7 +303,7 @@ export default function GovernancePage() {
 
       <div style={{ marginTop: 32, padding: "16px 20px", background: "var(--bg-2)", borderRadius: 8, border: "1px solid var(--border)" }}>
         <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.7 }}>
-          <strong style={{ color: "var(--text-secondary)" }}>How governance works:</strong> Stake LOCK to gain voting power (1 LOCK = 1 vote). Proposals need 10M LOCK quorum and 60% approval to pass. Passed proposals enter a 48-hour time-lock before execution by the GovernanceProgram on-chain. Rejected proposals may be resubmitted after 30 days.
+          <strong style={{ color: "var(--text-secondary)" }}>How governance works:</strong> Stake $LOCK to gain voting power (1 $LOCK = 1 vote). Proposals need 10M $LOCK quorum and 60% approval to pass. Passed proposals enter a 48-hour time-lock before execution by the GovernanceProgram on-chain. Rejected proposals may be resubmitted after 30 days.
         </div>
       </div>
     </motion.div>

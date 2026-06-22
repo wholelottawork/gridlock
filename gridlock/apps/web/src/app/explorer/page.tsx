@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { generateWorkers, getNetworkStats, generateJobs, type Worker, type Job, type WorkerRole, type WorkerStatus } from "@/lib/mock-data";
@@ -133,7 +133,7 @@ export default function ExplorerPage() {
               { label: "SLA PASS RATE",       value: `${stats.slaPassRate}%`,                         accent: "var(--green)" },
               { label: "P99 TTFT",            value: `${stats.p99TtftMs}ms`,                          accent: "var(--text-primary)" },
               { label: "ACTIVE WORKERS",      value: stats.activeworkers.toString(),                   accent: "var(--text-primary)" },
-              { label: "TOTAL PENALTIES",     value: `${stats.totalPenaltiesPaid.toLocaleString()} LOCK`, accent: "var(--orange)" },
+              { label: "TOTAL PENALTIES",     value: `${stats.totalPenaltiesPaid.toLocaleString()} $LOCK`, accent: "var(--orange)" },
             ].map((s) => (
               <div key={s.label} className="card">
                 <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 10 }}>{s.label}</div>
@@ -303,7 +303,7 @@ export default function ExplorerPage() {
                     { label: "GPU",         v: selectedWorker.hardwareTier,                        color: "var(--text-primary)" },
                     { label: "Status",      v: selectedWorker.status,                              color: selectedWorker.status === "Active" ? "var(--green)" : "var(--text-secondary)" },
                     { label: "TEE",         v: selectedWorker.teeCapable ? "Yes" : "No",           color: selectedWorker.teeCapable ? "var(--purple)" : "var(--text-muted)" },
-                    { label: "Staked",      v: `${selectedWorker.stakedLock.toLocaleString()} LOCK`, color: "var(--orange)" },
+                    { label: "Staked",      v: `${selectedWorker.stakedLock.toLocaleString()} $LOCK`, color: "var(--orange)" },
                     { label: "Jobs Today",  v: selectedWorker.jobsToday.toLocaleString(),          color: "var(--text-primary)" },
                   ].map((item) => (
                     <div key={item.label} style={{ background: "var(--bg-3)", borderRadius: 5, padding: "10px" }}>
@@ -320,7 +320,7 @@ export default function ExplorerPage() {
                   </div>
                 </div>
                 <div style={{ fontSize: 13, color: selectedWorker.penaltiesPaid > 0 ? "var(--red)" : "var(--green)", fontWeight: 600, marginBottom: 14 }}>
-                  {selectedWorker.penaltiesPaid > 0 ? `${selectedWorker.penaltiesPaid} LOCK in penalties` : "No penalties — clean record"}
+                  {selectedWorker.penaltiesPaid > 0 ? `${selectedWorker.penaltiesPaid} $LOCK in penalties` : "No penalties — clean record"}
                 </div>
                 <a href={`https://solscan.io/account/${selectedWorker.address}`} style={{ color: "var(--orange)", fontSize: 12, textDecoration: "none" }} target="_blank" rel="noopener noreferrer">
                   View on SolScan →

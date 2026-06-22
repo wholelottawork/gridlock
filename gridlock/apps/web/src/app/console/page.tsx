@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
@@ -281,7 +281,7 @@ export default function ConsolePage() {
                       </span>
                       {msg.meta.penalty_due_lock ? (
                         <span style={{ fontSize: 11, color: "var(--orange)", fontWeight: 700 }}>
-                          +{msg.meta.penalty_due_lock.toFixed(4)} LOCK credited
+                          +{msg.meta.penalty_due_lock.toFixed(4)} $LOCK credited
                         </span>
                       ) : null}
                       <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "monospace" }}>
@@ -359,7 +359,7 @@ export default function ConsolePage() {
             {[
               { label: "SLA PASS RATE",      value: realStats ? `${realStats.sla_pass_rate}%`                    : "…", accent: passRate >= 99 ? "var(--green)" : passRate >= 96 ? "var(--yellow)" : "var(--red)" },
               { label: "P99 TTFT",           value: realStats ? `${realStats.p99_ttft_ms}ms`                    : "…", accent: "var(--text-primary)" },
-              { label: "PENALTIES CREDITED", value: realStats ? `${realStats.total_penalties_lock.toFixed(4)} LOCK` : "…", accent: "var(--orange)" },
+              { label: "PENALTIES CREDITED", value: realStats ? `${realStats.total_penalties_lock.toFixed(4)} $LOCK` : "…", accent: "var(--orange)" },
               { label: "CONFIDENTIAL",       value: realStats ? `${realStats.confidential_share}%`              : "…", accent: "var(--text-primary)" },
             ].map((s) => (
               <div key={s.label} className="card">
@@ -514,7 +514,7 @@ export default function ConsolePage() {
               <div style={{ fontSize: 28, fontWeight: 900, color: "var(--orange)" }}>
                 {realStats ? realStats.total_penalties_lock.toFixed(4) : totalPenaltyCredited.toFixed(4)}
               </div>
-              <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>LOCK auto-credited</div>
+              <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>$LOCK auto-credited</div>
             </div>
             <div className="card">
               <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 10 }}>MISSES</div>
@@ -526,7 +526,7 @@ export default function ConsolePage() {
             <div className="card">
               <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 10 }}>HOW IT WORKS</div>
               <div style={{ fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.6, fontWeight: 700 }}>
-                Penalties transfer directly from worker staked LOCK to your wallet via PermanentDelegate — no dispute needed.
+                Penalties transfer directly from worker staked $LOCK to your wallet via PermanentDelegate — no dispute needed.
               </div>
             </div>
           </div>
@@ -548,7 +548,7 @@ export default function ConsolePage() {
                       <td style={{ fontFamily: "monospace", fontSize: 11, color: "var(--text-muted)" }}>{j.id.slice(0, 14)}</td>
                       <td><SlaTag tier={j.sla_tier} /></td>
                       <td style={{ color: "var(--red)", fontWeight: 700 }}>{j.ttft_ms}ms</td>
-                      <td style={{ color: "var(--orange)", fontWeight: 700 }}>+{j.penalty_paid?.toFixed(4)} LOCK</td>
+                      <td style={{ color: "var(--orange)", fontWeight: 700 }}>+{j.penalty_paid?.toFixed(4)} $LOCK</td>
                     </tr>
                   ))}
                 </tbody>
@@ -566,7 +566,7 @@ export default function ConsolePage() {
                         <td><SlaTag tier={j.slaTier} /></td>
                         <td style={{ color: "var(--red)", fontWeight: 700 }}>{j.ttftMs}ms</td>
                         <td style={{ color: "var(--text-muted)" }}>{limit}ms</td>
-                        <td style={{ color: "var(--orange)", fontWeight: 700 }}>+{j.penaltyPaid?.toFixed(4)} LOCK</td>
+                        <td style={{ color: "var(--orange)", fontWeight: 700 }}>+{j.penaltyPaid?.toFixed(4)} $LOCK</td>
                         <td><a href="#" style={{ color: "var(--orange)", fontSize: 11, textDecoration: "none" }}>SolScan →</a></td>
                       </tr>
                     );
@@ -703,8 +703,8 @@ export default function ConsolePage() {
             {/* Summary stats */}
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
               {[
-                { label: "MTD SPEND",       value: `${totalSpend.toFixed(2)} LOCK`,           accent: "var(--orange)" },
-                { label: "CREDIT BALANCE",  value: `${creditBalance.toFixed(2)} LOCK`,        accent: "var(--green)" },
+                { label: "MTD SPEND",       value: `${totalSpend.toFixed(2)} $LOCK`,           accent: "var(--orange)" },
+                { label: "CREDIT BALANCE",  value: `${creditBalance.toFixed(2)} $LOCK`,        accent: "var(--green)" },
                 { label: "REQUESTS (MTD)",  value: totalRequests.toLocaleString(),            accent: "var(--text-primary)" },
                 { label: "TOKENS (MTD)",    value: `${(totalTokens / 1_000_000).toFixed(1)}M`, accent: "var(--text-secondary)" },
               ].map((s) => (
@@ -724,7 +724,7 @@ export default function ConsolePage() {
                     <div key={t.tier}>
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
                         <span style={{ fontSize: 12, fontWeight: 700, color: t.color }}>{t.tier}</span>
-                        <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{t.spend.toFixed(2)} LOCK · {t.requests.toLocaleString()} req</span>
+                        <span style={{ fontSize: 12, color: "var(--text-secondary)" }}>{t.spend.toFixed(2)} $LOCK · {t.requests.toLocaleString()} req</span>
                       </div>
                       <div className="progress-track">
                         <div className="progress-fill" style={{ width: `${t.pct}%`, background: t.color }} />
@@ -741,7 +741,7 @@ export default function ConsolePage() {
                     <div key={m.model}>
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
                         <span style={{ fontSize: 11, fontFamily: "monospace", color: "var(--text-secondary)" }}>{m.model.split("-").slice(0, 3).join("-")}</span>
-                        <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700 }}>{m.spend.toFixed(2)} LOCK</span>
+                        <span style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700 }}>{m.spend.toFixed(2)} $LOCK</span>
                       </div>
                       <div className="progress-track">
                         <div className="progress-fill" style={{ width: `${m.pct}%`, background: "var(--orange)" }} />
@@ -754,7 +754,7 @@ export default function ConsolePage() {
 
             {/* Pricing */}
             <div className="card">
-              <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 14 }}>PRICING (LOCK per 1M tokens)</div>
+              <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 14 }}>PRICING ($LOCK per 1M tokens)</div>
               <table className="data-table">
                 <thead><tr>{["Model", "Batch", "Standard", "Realtime", "Confidential"].map((h) => <th key={h}>{h}</th>)}</tr></thead>
                 <tbody>
@@ -766,7 +766,7 @@ export default function ConsolePage() {
                     <tr key={model}>
                       <td style={{ fontFamily: "monospace", fontSize: 12, color: "var(--text-secondary)" }}>{model}</td>
                       {prices.map((p, i) => (
-                        <td key={i} style={{ color: "var(--orange)", fontWeight: 700 }}>{p} LOCK</td>
+                        <td key={i} style={{ color: "var(--orange)", fontWeight: 700 }}>{p} $LOCK</td>
                       ))}
                     </tr>
                   ))}
@@ -783,7 +783,7 @@ export default function ConsolePage() {
                   {invoices.map((inv) => (
                     <tr key={inv.period}>
                       <td style={{ fontWeight: 600 }}>{inv.period}</td>
-                      <td style={{ color: "var(--orange)", fontWeight: 700 }}>{inv.amount.toFixed(2)} LOCK</td>
+                      <td style={{ color: "var(--orange)", fontWeight: 700 }}>{inv.amount.toFixed(2)} $LOCK</td>
                       <td><span style={{ fontSize: 10, fontWeight: 700, color: "#FFFFFF", padding: "2px 7px", borderRadius: 3 }}>{inv.status.toUpperCase()}</span></td>
                       <td style={{ fontFamily: "monospace", fontSize: 11, color: "var(--text-muted)" }}>{inv.txId}</td>
                     </tr>
@@ -791,7 +791,7 @@ export default function ConsolePage() {
                 </tbody>
               </table>
               <div style={{ marginTop: 14, fontSize: 12, color: "var(--text-muted)" }}>
-                Payments are settled automatically each month. Fees are deducted from your credit balance in LOCK.
+                Payments are settled automatically each month. Fees are deducted from your credit balance in $LOCK.
               </div>
             </div>
           </div>

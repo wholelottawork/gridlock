@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -119,7 +119,7 @@ export default function WorkerPage() {
       {/* Not registered notice */}
       {mounted && connected && notRegistered && (
         <div style={{ marginBottom: 20, padding: "14px 18px", borderRadius: 8, background: "rgba(255,160,0,0.06)", border: "1px solid rgba(255,160,0,0.2)", fontSize: 13, color: "var(--orange)", lineHeight: 1.6 }}>
-          <strong>Wallet connected but not registered as a worker.</strong> Go to the Docs page to learn how to register your GPU and start earning LOCK.
+          <strong>Wallet connected but not registered as a worker.</strong> Go to the Docs page to learn how to register your GPU and start earning $LOCK.
         </div>
       )}
 
@@ -201,7 +201,7 @@ export default function WorkerPage() {
                 </div>
                 <div style={{ background: "var(--bg-3)", borderRadius: 6, padding: "10px" }}>
                   <div style={{ fontSize: 13, fontWeight: 700, color: "var(--red)" }}>{workerData.penalties_paid.toFixed(4)}</div>
-                  <div style={{ fontSize: 11, color: "var(--text-muted)" }}>LOCK penalized</div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)" }}>$LOCK penalized</div>
                 </div>
               </div>
             )}
@@ -328,7 +328,7 @@ export default function WorkerPage() {
       {/* Stake + Recent Jobs */}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 14 }}>
         <div className="card">
-          <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 14 }}>STAKED LOCK</div>
+          <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 14 }}>STAKED $LOCK</div>
           <div style={{ fontSize: 28, fontWeight: 900, marginBottom: 4 }}>{dispStake.toLocaleString()}</div>
           <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 14, fontWeight: 700 }}>$LOCK</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 14 }}>
@@ -342,7 +342,7 @@ export default function WorkerPage() {
             </div>
           </div>
           <div style={{ fontSize: 11, color: "#777777", background: "rgba(255,255,255,0.04)", borderRadius: 5, padding: "8px", fontWeight: 700 }}>
-            8% APY · ~{(dispStake * 0.08 / 365).toFixed(2)} LOCK/day
+            8% APY · ~{(dispStake * 0.08 / 365).toFixed(2)} $LOCK/day
           </div>
         </div>
 
@@ -376,7 +376,7 @@ export default function WorkerPage() {
                     <td style={{ color: "var(--text-secondary)" }}>{j.tpot_ms}ms</td>
                     <td><span style={{ fontWeight: 800, fontSize: 11, color: j.sla_met ? "var(--green)" : "var(--red)" }}>{j.sla_met ? "MET" : "MISS"}</span></td>
                     <td style={{ color: "var(--red)", fontSize: 11 }}>
-                      {j.penalty_paid ? `-${j.penalty_paid} LOCK` : <span style={{ color: "var(--text-muted)" }}>—</span>}
+                      {j.penalty_paid ? `-${j.penalty_paid} $LOCK` : <span style={{ color: "var(--text-muted)" }}>—</span>}
                     </td>
                   </tr>
                 )) : mockJobs.map((j) => (
@@ -392,7 +392,7 @@ export default function WorkerPage() {
                     <td style={{ color: "var(--text-secondary)" }}>{j.tpotMs}ms</td>
                     <td><span style={{ fontWeight: 800, fontSize: 11, color: j.slaMet ? "var(--green)" : "var(--red)" }}>{j.slaMet ? "MET" : "MISS"}</span></td>
                     <td style={{ color: "var(--red)", fontSize: 11 }}>
-                      {j.penaltyPaid ? `-${j.penaltyPaid} LOCK` : <span style={{ color: "var(--text-muted)" }}>—</span>}
+                      {j.penaltyPaid ? `-${j.penaltyPaid} $LOCK` : <span style={{ color: "var(--text-muted)" }}>—</span>}
                     </td>
                   </tr>
                 ))}
