@@ -72,6 +72,10 @@ export interface ApiNetworkStats {
   total_workers: number;
   requests_today: number;
   cache_hit_entries: number;
+  cache_hit_rate?: number;
+  warm_path_rate?: number;
+  prefill_workers?: number;
+  decode_workers?: number;
 }
 
 export interface ChatGridlockMeta {

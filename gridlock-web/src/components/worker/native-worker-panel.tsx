@@ -28,7 +28,17 @@ export function NativeWorkerPanel() {
   }
 
   return (
-    <div className="card" style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+    <div className="card card-orange" style={{ position: "relative", height: "100%", display: "flex", flexDirection: "column" }}>
+      <span style={{
+        position: "absolute", top: 16, right: 16,
+        fontSize: 10, fontWeight: 700, letterSpacing: "0.5px",
+        padding: "3px 8px", borderRadius: 4,
+        background: "rgba(255,160,0,0.15)", color: "var(--orange)",
+        border: "1px solid rgba(255,160,0,0.3)",
+      }}>
+        RECOMMENDED
+      </span>
+
       <div style={{ marginBottom: 6 }}>
         <div style={{ fontSize: 18, fontWeight: 800 }}>Native Worker</div>
         <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
@@ -37,13 +47,14 @@ export function NativeWorkerPanel() {
       </div>
 
       <p style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6, marginBottom: 16 }}>
-        Headless worker for servers and power users. Runs in your terminal, connects to the router over WebSocket, and forwards jobs to Ollama or vLLM on your GPU.
+        Headless worker for servers and power users. 
+        <br />Runs in your terminal, connects to the router, and forwards jobs to Ollama or vLLM on your GPU.
       </p>
 
       <ol style={{ margin: "0 0 16px", paddingLeft: 18, fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.7 }}>
-        <li>Install <a href="https://ollama.com/download" target="_blank" rel="noreferrer" style={{ color: "var(--orange)" }}>Ollama</a> (recommended on Windows) — the worker can auto-start it</li>
-        <li>In the worker folder: run setup once, then start the worker{connected && publicKey ? " (wallet pre-filled)" : ""}</li>
-        <li>Connects to <code style={{ fontSize: 11 }}>api.reacton.dev</code> automatically</li>
+        <li>1. Install <a href="https://ollama.com/download" target="_blank" rel="noreferrer" style={{ color: "var(--orange)" }}>Ollama</a> (recommended on Windows) — the worker can auto-start it</li>
+        <li>2. In the worker folder: run setup once, then start the worker{connected && publicKey ? " (wallet pre-filled)" : ""}</li>
+        <li>3. Connects to the router automatically</li>
       </ol>
 
       <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 8 }}>
@@ -88,7 +99,7 @@ export function NativeWorkerPanel() {
           </div>
         </div>
         <p style={{ marginTop: 12, fontSize: 11, color: "var(--text-muted)", lineHeight: 1.55 }}>
-          Want a UI? Use <strong>Desktop Worker</strong> instead — same network, Electron dashboard included.
+          Want a UI? Use <strong>Desktop Worker</strong> instead — same network, worker dashboard included.
         </p>
       </div>
     </div>

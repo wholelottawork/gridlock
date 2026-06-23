@@ -1,14 +1,38 @@
 "use client";
+import type { ReactNode } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWebGPU } from "@/hooks/use-webgpu";
-import { useBrowserWorker, BROWSER_MODEL } from "@/context/browser-worker-context";
+import {
+  useBrowserWorker,
+  BROWSER_MODEL,
+  type BrowserWorkerStatus,
+} from "@/context/browser-worker-context";
 import { fmt } from "@/lib/utils";
+import { WorkerAlert } from "@/components/worker/worker-alert";
+import { WorkerStatBox, WorkerStatSection } from "@/components/worker/worker-stat-box";
 
 function formatUptime(seconds: number) {
   const hrs = Math.floor(seconds / 3600);
   const mins = Math.floor((seconds % 3600) / 60);
   const secs = seconds % 60;
   return `${hrs.toString().padStart(2, "0")}:${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
+}
+
+function statusDisplay(status: BrowserWorkerStatus): { label: string; color: string; pulse: boolean } {
+  switch (status) {
+    case "ready":
+      return { label: "Ready", color: "var(--green)", pulse: true };
+    case "working":
+      return { label: "Working", color: "var(--green)", pulse: true };
+    case "initializing":
+    case "downloading":
+    case "connecting":
+      return { label: "Starting…", color: "var(--orange)", pulse: true };
+    case "error":
+      return { label: "Error", color: "var(--red)", pulse: false };
+    default:
+      return { label: "Not Ready", color: "var(--text-muted)", pulse: false };
+  }
 }
 
 export function BrowserWorkerPanel() {
@@ -30,120 +54,250 @@ export function BrowserWorkerPanel() {
     stopWorker,
   } = worker;
 
-  const isReady = status === "ready" || status === "working";
-  const statusLabel = isReady ? "Ready" : "Not Ready";
-  const statusColor = isReady ? "var(--green)" : "var(--text-muted)";
+  const isActive = status === "ready" || status === "working";
+  const isStarting = status === "initializing" || status === "downloading" || status === "connecting";
+  const canStart = connected && webgpu.supported !== false && !isStarting;
+  const hasSession = isActive || uptime > 0 || jobsCompleted > 0 || benchmarkTokPerSec > 0;
+  const badge = statusDisplay(status);
 
   return (
     <div className="card">
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 280px", gap: 24, alignItems: "start" }}>
-        <div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, gap: 8 }}>
-            <div>
-              <div style={{ fontSize: 18, fontWeight: 800 }}>Browser Worker</div>
-              <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
-                WebLLM · {BROWSER_MODEL.split("-").slice(0, 2).join(" ")} · runs in-tab via WebGPU
-              </div>
-            </div>
-            <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: statusColor, flexShrink: 0 }}>
-              <span className={isReady ? "pulse" : ""} style={{ width: 6, height: 6, borderRadius: "50%", background: statusColor }} />
-              {statusLabel}
-            </span>
-          </div>
+      <BrowserWorkerHeader badge={badge} />
 
-          {!connected && (
-            <div style={{ marginBottom: 12, padding: 10, borderRadius: 8, border: "1px solid rgba(255,160,0,0.25)", background: "rgba(255,160,0,0.04)", fontSize: 12, color: "var(--orange)", lineHeight: 1.5 }}>
-              Connect wallet with <strong>CONNECT</strong> to start.
-            </div>
-          )}
+      <p style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6, marginBottom: 16 }}>
+        Runs entirely in your browser — no install. Uses WebGPU to serve jobs while this tab stays open.
+      </p>
 
-          {webgpu.supported === false && !webgpu.loading && (
-            <div style={{ marginBottom: 12, padding: 10, borderRadius: 8, border: "1px solid rgba(255,68,68,0.3)", background: "rgba(255,68,68,0.06)", fontSize: 12, color: "var(--red)", lineHeight: 1.5 }}>
-              WebGPU required — use Chrome or Edge on desktop.
-            </div>
-          )}
-
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: 8, marginBottom: 14 }}>
-            <StatBox label="GPU" value={webgpu.loading ? "Detecting…" : webgpu.gpuName ?? "—"} wide />
-            <StatBox label="VRAM" value={webgpu.estimatedVramGb != null ? `~${webgpu.estimatedVramGb} GB` : "—"} />
-            <StatBox label="EARNED" value={earningsToday.toFixed(2)} />
-            <StatBox label="UPTIME" value={formatUptime(uptime)} />
-            <StatBox label="JOBS" value={fmt(jobsCompleted, 0)} />
-            <StatBox label="TOK/S" value={benchmarkTokPerSec > 0 ? benchmarkTokPerSec.toFixed(1) : "—"} />
-          </div>
-
-          {(isReady || status === "downloading" || status === "initializing" || status === "connecting") && (
-            <div style={{ minHeight: 44, display: "flex", alignItems: "center" }}>
-              {(status === "downloading" || status === "initializing") ? (
-                <div style={{ width: "100%" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6, fontSize: 11, color: "var(--text-muted)" }}>
-                    <span>{loadText}</span>
-                    <span>{Math.round(loadProgress * 100)}%</span>
-                  </div>
-                  <div className="progress-track">
-                    <div className="progress-fill" style={{ width: `${loadProgress * 100}%`, background: "var(--orange)" }} />
-                  </div>
-                </div>
-              ) : currentJobId ? (
-                <div style={{
-                  width: "100%", padding: "8px 10px", borderRadius: 8,
-                  background: "rgba(255,160,0,0.08)", border: "1px solid rgba(255,160,0,0.2)", fontSize: 12,
-                }}>
-                  Processing job{" "}
-                  <span style={{ fontFamily: "monospace", color: "var(--orange)" }}>{currentJobId.slice(0, 12)}…</span>
-                </div>
-              ) : null}
-            </div>
-          )}
-
-          {error && (
-            <div style={{ marginTop: 12, padding: 10, borderRadius: 8, background: "rgba(255,68,68,0.08)", border: "1px solid rgba(255,68,68,0.25)", fontSize: 12, color: "var(--red)" }}>
-              {error}
-            </div>
-          )}
-        </div>
-
-        <div>
-          {isReady ? (
-            <button type="button" onClick={() => void stopWorker()} style={{
-              width: "100%", height: 52, borderRadius: 8, border: "1px solid rgba(255,68,68,0.35)",
-              background: "rgba(255,68,68,0.08)", color: "var(--red)", fontSize: 14, fontWeight: 800, cursor: "pointer",
-            }}>
-              Stop Browser Worker
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => void startWorker()}
-              disabled={!connected || webgpu.supported === false || status === "downloading" || status === "connecting"}
-              style={{
-                width: "100%", height: 52, borderRadius: 8, border: "none",
-                background: connected && webgpu.supported !== false ? "#FFFFFF" : "var(--bg-4)",
-                color: connected && webgpu.supported !== false ? "#000" : "var(--text-muted)",
-                fontSize: 14, fontWeight: 800,
-                cursor: connected && webgpu.supported !== false ? "pointer" : "not-allowed",
-              }}
-            >
-              {status === "downloading" || status === "connecting" ? "Starting…" : "Start Browser Worker"}
-            </button>
-          )}
-          <p style={{ marginTop: 10, fontSize: 11, color: "var(--text-muted)", lineHeight: 1.55, textAlign: "center" }}>
-            Keeps running when you navigate to Console or Explorer.
-          </p>
-        </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
+        {!connected && (
+          <WorkerAlert variant="warning">
+            Connect wallet to start.
+          </WorkerAlert>
+        )}
+        {webgpu.supported === false && !webgpu.loading && (
+          <WorkerAlert variant="error">
+            WebGPU required — use Chrome or Edge on desktop.
+          </WorkerAlert>
+        )}
+        {error && <WorkerAlert variant="error">{error}</WorkerAlert>}
       </div>
+
+      <div style={{
+        display: "grid",
+        gridTemplateColumns: hasSession ? "1fr 1fr" : "1fr",
+        gap: 16,
+        marginTop: 16,
+        alignItems: "start",
+      }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <WorkerStatSection title="HARDWARE">
+            <WorkerStatBox label="GPU" value={webgpu.loading ? "Detecting…" : webgpu.gpuName ?? "—"} />
+            <WorkerStatBox
+              label="VRAM"
+              value={webgpu.estimatedVramGb != null ? `~${webgpu.estimatedVramGb} GB` : "—"}
+            />
+          </WorkerStatSection>
+
+          <BrowserWorkerActions
+            isActive={isActive}
+            isStarting={isStarting}
+            canStart={canStart}
+            onStart={() => void startWorker()}
+            onStop={() => void stopWorker()}
+          />
+        </div>
+
+        {hasSession && (
+          <WorkerStatSection title="SESSION">
+            <WorkerStatBox label="EARNED" value={earningsToday.toFixed(2)} />
+            <WorkerStatBox label="UPTIME" value={formatUptime(uptime)} />
+            <WorkerStatBox label="JOBS" value={fmt(jobsCompleted, 0)} />
+            <WorkerStatBox
+              label="TOK/S"
+              value={benchmarkTokPerSec > 0 ? benchmarkTokPerSec.toFixed(1) : "—"}
+            />
+          </WorkerStatSection>
+        )}
+      </div>
+
+      <BrowserWorkerActivity
+        status={status}
+        loadText={loadText}
+        loadProgress={loadProgress}
+        currentJobId={currentJobId}
+      />
     </div>
   );
 }
 
-function StatBox({ label, value, wide }: { label: string; value: string; wide?: boolean }) {
+function BrowserWorkerHeader({
+  badge,
+}: {
+  badge: { label: string; color: string; pulse: boolean };
+}) {
+  const modelLabel = BROWSER_MODEL.split("-").slice(0, 2).join(" ");
+
   return (
     <div style={{
-      gridColumn: wide ? "span 2" : undefined,
-      background: "var(--bg-3)", borderRadius: 8, padding: 10,
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      marginBottom: 8,
+      gap: 8,
     }}>
-      <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{value}</div>
+      <div>
+        <div style={{ fontSize: 18, fontWeight: 800 }}>Browser Worker</div>
+        <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>
+          WebLLM · {modelLabel} · in-tab via WebGPU
+        </div>
+      </div>
+      <span style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 6,
+        fontSize: 12,
+        fontWeight: 700,
+        color: badge.color,
+        flexShrink: 0,
+      }}>
+        <span
+          className={badge.pulse ? "pulse" : ""}
+          style={{ width: 6, height: 6, borderRadius: "50%", background: badge.color }}
+        />
+        {badge.label}
+      </span>
+    </div>
+  );
+}
+
+function BrowserWorkerActions({
+  isActive,
+  isStarting,
+  canStart,
+  onStart,
+  onStop,
+}: {
+  isActive: boolean;
+  isStarting: boolean;
+  canStart: boolean;
+  onStart: () => void;
+  onStop: () => void;
+}) {
+  if (isActive) {
+    return (
+      <button
+        type="button"
+        onClick={onStop}
+        style={{
+          width: "100%",
+          height: 52,
+          borderRadius: 8,
+          border: "1px solid rgba(255,68,68,0.35)",
+          background: "rgba(255,68,68,0.08)",
+          color: "var(--red)",
+          fontSize: 14,
+          fontWeight: 800,
+          cursor: "pointer",
+        }}
+      >
+        Stop Browser Worker
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onStart}
+      disabled={!canStart}
+      style={{
+        width: "100%",
+        height: 52,
+        borderRadius: 8,
+        border: "none",
+        background: canStart ? "#FFFFFF" : "var(--bg-4)",
+        color: canStart ? "#000" : "var(--text-muted)",
+        fontSize: 14,
+        fontWeight: 800,
+        cursor: canStart ? "pointer" : "not-allowed",
+      }}
+    >
+      {isStarting ? "Starting…" : "Start Browser Worker"}
+    </button>
+  );
+}
+
+function BrowserWorkerActivity({
+  status,
+  loadText,
+  loadProgress,
+  currentJobId,
+}: {
+  status: BrowserWorkerStatus;
+  loadText: string;
+  loadProgress: number;
+  currentJobId: string | null;
+}) {
+  const isLoading = status === "downloading" || status === "initializing";
+
+  let content: ReactNode = null;
+
+  if (isLoading) {
+    content = (
+      <div style={{ width: "100%" }}>
+        <div style={{
+          display: "flex",
+          justifyContent: "space-between",
+          marginBottom: 6,
+          fontSize: 11,
+          color: "var(--text-muted)",
+        }}>
+          <span>{loadText}</span>
+          <span>{Math.round(loadProgress * 100)}%</span>
+        </div>
+        <div className="progress-track">
+          <div
+            className="progress-fill"
+            style={{ width: `${loadProgress * 100}%`, background: "var(--orange)" }}
+          />
+        </div>
+      </div>
+    );
+  } else if (status === "connecting") {
+    content = (
+      <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+        Connecting to router…
+      </div>
+    );
+  } else if (currentJobId) {
+    content = (
+      <div style={{
+        width: "100%",
+        padding: "8px 10px",
+        borderRadius: 8,
+        background: "rgba(255,160,0,0.08)",
+        border: "1px solid rgba(255,160,0,0.2)",
+        fontSize: 12,
+      }}>
+        Processing job{" "}
+        <span style={{ fontFamily: "monospace", color: "var(--orange)" }}>
+          {currentJobId.slice(0, 12)}…
+        </span>
+      </div>
+    );
+  } else if (status === "ready") {
+    content = (
+      <div style={{ fontSize: 12, color: "var(--text-muted)" }}>
+        Waiting for jobs…
+      </div>
+    );
+  }
+
+  if (!content) return null;
+
+  return (
+    <div style={{ marginTop: 16, paddingTop: 16, borderTop: "1px solid var(--border)" }}>
+      {content}
     </div>
   );
 }
