@@ -3,8 +3,9 @@ import { config } from "../config.js";
 import { dbUpsertWorker } from "../db.js";
 import { anchorRegisterWorker } from "../solana.js";
 import { jobsStore, workersRegistry } from "../state.js";
-import type { HeartbeatRequest, RegisterWorkerRequest, WorkerRecord } from "../types.js";
+import type { HeartbeatRequest, RegisterWorkerRequest, SetWorkerStatusRequest, WorkerRecord } from "../types.js";
 import { recomputeWorkerStats } from "../worker-stats.js";
+import { workerHub } from "../ws/hub.js";
 
 export const workerRoutes = new Hono();
 
@@ -92,4 +93,29 @@ workerRoutes.post("/v1/workers/heartbeat", async (c) => {
 
   void dbUpsertWorker(worker);
   return c.json({ ok: true, ts: worker.last_heartbeat, status: worker.status });
+});
+
+const RUNTIME_STATUSES = new Set(["Active", "Paused", "Stopping"]);
+
+workerRoutes.post("/v1/workers/:address/status", async (c) => {
+  const address = c.req.param("address");
+  const worker = workersRegistry.find((w) => w.address === address);
+  if (!worker) return c.json({ error: "Worker not found" }, 404);
+
+  const req = (await c.req.json()) as SetWorkerStatusRequest;
+  if (!RUNTIME_STATUSES.has(req.status)) {
+    return c.json({ error: `Invalid status. Allowed: ${[...RUNTIME_STATUSES].join(", ")}` }, 400);
+  }
+
+  worker.status = req.status;
+  if (req.status === "Paused") {
+    workerHub.disconnectWorker(address);
+  }
+
+  void dbUpsertWorker(worker);
+  return c.json({
+    ok: true,
+    status: worker.status,
+    in_flight: workerHub.inFlightCount(address),
+  });
 });

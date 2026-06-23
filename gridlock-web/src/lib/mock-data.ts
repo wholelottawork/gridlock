@@ -2,7 +2,7 @@
 
 export type SlaTier = "realtime" | "standard" | "batch" | "confidential";
 export type WorkerRole = "Prefill" | "Decode" | "Cache" | "Router";
-export type WorkerStatus = "Active" | "Paused" | "Draining" | "AutoGated";
+export type WorkerStatus = "Active" | "Paused" | "Stopping" | "AutoGated";
 
 export interface Worker {
   id: string;

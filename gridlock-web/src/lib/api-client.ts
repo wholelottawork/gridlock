@@ -175,6 +175,15 @@ export async function heartbeat(address: string, goodput_score?: number): Promis
   return post("/v1/workers/heartbeat", { worker_address: address, goodput_score });
 }
 
+export type WorkerRuntimeStatus = "Active" | "Paused" | "Stopping";
+
+export async function setWorkerStatus(
+  address: string,
+  status: WorkerRuntimeStatus,
+): Promise<{ ok: boolean; status: string; in_flight?: number }> {
+  return post(`/v1/workers/${address}/status`, { status });
+}
+
 /** Register a new worker, or send heartbeat if this pubkey is already registered. */
 export async function ensureWorkerRegistered(body: {
   operator_pubkey: string;

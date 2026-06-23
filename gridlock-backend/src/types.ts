@@ -75,6 +75,12 @@ export interface HeartbeatRequest {
   p99_ttft_ms?: number;
 }
 
+export type WorkerRuntimeStatus = "Active" | "Paused" | "Stopping" | "AutoGated";
+
+export interface SetWorkerStatusRequest {
+  status: WorkerRuntimeStatus;
+}
+
 export interface LiveEvent {
   type: string;
   id: string;

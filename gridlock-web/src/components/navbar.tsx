@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useEffect, useRef, useState } from "react";
 import { WalletIcon } from "@/components/wallet-icon";
+import { useBrowserWorker } from "@/context/browser-worker-context";
 
 const links = [
   { href: "/worker",      label: "Worker" },
@@ -71,6 +72,8 @@ export function Navbar() {
 
   const isConnected  = mounted && connected;
   const isConnecting = mounted && connecting;
+  const worker = useBrowserWorker();
+  const workerLive = worker.status === "ready" || worker.status === "working";
 
   return (
     <nav style={{
@@ -113,6 +116,7 @@ export function Navbar() {
         <div style={{ display: "flex", alignItems: "center", gap: 0, flex: 1 }}>
           {links.map((l) => {
             const active = path === l.href;
+            const showWorkerDot = l.href === "/worker" && workerLive;
             return (
               <Link key={l.href} href={l.href} style={{
                 position: "relative",
@@ -122,6 +126,9 @@ export function Navbar() {
                 fontWeight: active ? 700 : 500,
                 textDecoration: "none",
                 color: active ? "#FFFFFF" : "#666666",
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
                 background: active ? "rgba(255,255,255,0.06)" : "transparent",
                 transition: "all 0.15s",
                 letterSpacing: "0.2px",
@@ -133,6 +140,19 @@ export function Navbar() {
                 if (!active) (e.currentTarget as HTMLElement).style.color = "#666666";
               }}>
                 {l.label}
+                {showWorkerDot && (
+                  <span
+                    className="pulse"
+                    title={worker.status === "working" ? "Browser worker processing a job" : "Browser worker online"}
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: "50%",
+                      background: worker.status === "working" ? "var(--orange)" : "var(--green)",
+                      flexShrink: 0,
+                    }}
+                  />
+                )}
                 {active && (
                   <span style={{
                     position: "absolute", bottom: -1, left: "20%", right: "20%",

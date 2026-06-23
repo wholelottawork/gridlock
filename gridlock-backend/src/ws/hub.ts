@@ -126,7 +126,9 @@ class WorkerHub {
     };
     this.sessions.set(address, session);
     worker.last_heartbeat = Date.now() / 1000;
-    worker.status = "Active";
+    if (worker.status === "AutoGated") {
+      worker.status = "Active";
+    }
 
     console.log(`[ws] registered ${address.slice(0, 8)}… (${session.type})`);
     this.send(ws, { type: "worker:registered", worker_address: address });
@@ -252,7 +254,7 @@ class WorkerHub {
     if (!open) return null;
 
     const worker = workersRegistry.find((w) => w.address === workerAddress);
-    if (!worker || worker.status === "AutoGated") return null;
+    if (!worker || worker.status !== "Active") return null;
     if (!worker.sla_tiers.includes(open.payload.slaTier)) return null;
 
     this.queue.splice(this.queue.indexOf(open), 1);
@@ -307,6 +309,19 @@ class WorkerHub {
       const w = workersRegistry.find((r) => r.address === s.address);
       return w && w.status === "Active" && w.sla_tiers.includes(slaTier);
     });
+  }
+
+  /** Force-disconnect a worker WebSocket (e.g. when paused from dashboard). */
+  disconnectWorker(address: string) {
+    this.unregister(address);
+  }
+
+  inFlightCount(address: string): number {
+    let count = 0;
+    for (const pending of this.pending.values()) {
+      if (pending.assignedAddress === address) count += 1;
+    }
+    return count;
   }
 
   getStats() {

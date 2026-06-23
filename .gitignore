@@ -25,6 +25,11 @@ target/
 .env.local
 .env.*.local
 
+# Cloudflare
+cloudflare/config.yml
+cloudflare/tunnel-id
+cloudflare/logs/tunnel.pid
+
 # OS
 .DS_Store
 Thumbs.db

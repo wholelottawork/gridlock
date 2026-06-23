@@ -1,17 +1,11 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { CreateMLCEngine, type MLCEngine, type InitProgressReport } from "@mlc-ai/web-llm";
 import { useWebGPU } from "@/hooks/use-webgpu";
-import { useWorkerSocket } from "@/hooks/use-worker-socket";
-import { fetchNetworkStats, ensureWorkerRegistered, type ApiNetworkStats } from "@/lib/api-client";
-import { prepareInferenceMessages } from "@/lib/job-messages";
+import { fetchNetworkStats, type ApiNetworkStats } from "@/lib/api-client";
+import { useBrowserWorker, BROWSER_MODEL } from "@/context/browser-worker-context";
 import { fmt } from "@/lib/utils";
 import { NetworkGraph } from "@/components/worker/network-graph";
-
-const BROWSER_MODEL = "Llama-3.2-1B-Instruct-q4f16_1-MLC";
-
-type WorkerStatus = "offline" | "initializing" | "downloading" | "connecting" | "ready" | "working" | "error";
 
 function formatUptime(seconds: number) {
   const hrs = Math.floor(seconds / 3600);
@@ -21,25 +15,26 @@ function formatUptime(seconds: number) {
 }
 
 export function BrowserWorkerPanel() {
-  const { publicKey, connected } = useWallet();
+  const { connected } = useWallet();
   const webgpu = useWebGPU();
-  const socket = useWorkerSocket();
-
-  const [status, setStatus] = useState<WorkerStatus>("offline");
-  const [error, setError] = useState<string | null>(null);
-  const [loadProgress, setLoadProgress] = useState(0);
-  const [loadText, setLoadText] = useState("");
-  const [uptime, setUptime] = useState(0);
-  const [jobsCompleted, setJobsCompleted] = useState(0);
-  const [currentJobId, setCurrentJobId] = useState<string | null>(null);
-  const [benchmarkTokPerSec, setBenchmarkTokPerSec] = useState(0);
+  const worker = useBrowserWorker();
   const [network, setNetwork] = useState<ApiNetworkStats | null>(null);
-  const [earningsToday, setEarningsToday] = useState(0);
 
-  const engineRef = useRef<MLCEngine | null>(null);
-  const uptimeRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const stopWorkerRef = useRef<() => Promise<void>>(async () => {});
-  const walletAddr = connected && publicKey ? publicKey.toBase58() : null;
+  const {
+    status,
+    error,
+    loadProgress,
+    loadText,
+    uptime,
+    jobsCompleted,
+    currentJobId,
+    benchmarkTokPerSec,
+    earningsToday,
+    socketConnected,
+    socketStats,
+    startWorker,
+    stopWorker,
+  } = worker;
 
   useEffect(() => {
     const load = () => fetchNetworkStats().then(setNetwork).catch(() => {});
@@ -47,156 +42,6 @@ export function BrowserWorkerPanel() {
     const id = setInterval(load, 5000);
     return () => clearInterval(id);
   }, []);
-
-  const processJob = useCallback(
-    async (jobId: string, messages: { role: string; content: string }[]) => {
-      if (!engineRef.current) {
-        socket.failJob(jobId, "Engine not ready");
-        return;
-      }
-
-      setStatus("working");
-      setCurrentJobId(jobId);
-      const start = performance.now();
-      let firstTokenTs: number | null = null;
-      let tokens = 0;
-      let full = "";
-
-      try {
-        if (typeof (engineRef.current as unknown as { resetChat?: () => Promise<void> }).resetChat === "function") {
-          await (engineRef.current as unknown as { resetChat: () => Promise<void> }).resetChat();
-        }
-
-        const withSystem = prepareInferenceMessages(messages);
-
-        const stream = await engineRef.current.chat.completions.create({
-          messages: withSystem,
-          temperature: 0.7,
-          max_tokens: 256,
-          stream: true,
-        });
-
-        for await (const chunk of stream) {
-          const text = chunk.choices[0]?.delta?.content ?? "";
-          if (!text) continue;
-          if (firstTokenTs === null) firstTokenTs = performance.now();
-          full += text;
-          tokens += 1;
-        }
-
-        const ttftMs = firstTokenTs ? Math.floor(firstTokenTs - start) : Math.floor(performance.now() - start);
-        const outputTokens = Math.max(tokens, 1);
-        const tpotMs = outputTokens > 1 && firstTokenTs
-          ? Math.floor((performance.now() - firstTokenTs) / (outputTokens - 1))
-          : 0;
-
-        socket.completeJob(jobId, full.trim() || "(empty)", tokens, ttftMs, tpotMs);
-        setJobsCompleted((n) => n + 1);
-      } catch (e) {
-        socket.failJob(jobId, e instanceof Error ? e.message : "Inference failed");
-      } finally {
-        setStatus("ready");
-        setCurrentJobId(null);
-      }
-    },
-    [socket],
-  );
-
-  useEffect(() => {
-    socket.setOnNewJob((jobId, messages) => {
-      void processJob(jobId, messages);
-    });
-    return () => socket.setOnNewJob(null);
-  }, [socket, processJob]);
-
-  const stopWorker = useCallback(async () => {
-    if (walletAddr) socket.unregisterWorker(walletAddr);
-    socket.disconnect();
-    if (engineRef.current) {
-      try { await engineRef.current.unload(); } catch { /* ignore */ }
-      engineRef.current = null;
-    }
-    if (uptimeRef.current) clearInterval(uptimeRef.current);
-    setStatus("offline");
-    setUptime(0);
-    setLoadProgress(0);
-    setCurrentJobId(null);
-  }, [socket, walletAddr]);
-
-  const startWorker = useCallback(async () => {
-    if (!walletAddr) {
-      setError("Connect your wallet first.");
-      setStatus("error");
-      return;
-    }
-    if (!webgpu.supported) {
-      setError("WebGPU is required for browser inference.");
-      setStatus("error");
-      return;
-    }
-
-    setError(null);
-    setStatus("initializing");
-
-    try {
-      await ensureWorkerRegistered({
-        operator_pubkey: walletAddr,
-        role: "Prefill",
-        hardware_tier: webgpu.gpuName ?? "WebGPU Browser",
-        tee_capable: false,
-        endpoint: "browser://webgpu",
-      });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setStatus("error");
-      return;
-    }
-
-    setStatus("downloading");
-    setLoadText("Loading model…");
-
-    try {
-      const engine = await CreateMLCEngine(BROWSER_MODEL, {
-        initProgressCallback: (report: InitProgressReport) => {
-          setLoadProgress(report.progress);
-          setLoadText(report.text);
-        },
-      });
-
-      setLoadText("Benchmarking…");
-      const benchStart = performance.now();
-      const bench = await engine.chat.completions.create({
-        messages: [{ role: "user", content: "Hi" }],
-        max_tokens: 8,
-      });
-      const benchText = bench.choices[0]?.message?.content ?? "";
-      const benchTokens = benchText.split(/\s+/).filter(Boolean).length || 1;
-      const tokPerSec = Math.round((benchTokens / ((performance.now() - benchStart) / 1000)) * 10) / 10;
-      setBenchmarkTokPerSec(tokPerSec);
-
-      engineRef.current = engine;
-
-      setStatus("connecting");
-      await socket.connect();
-
-      socket.registerWorker(walletAddr, {
-        model: BROWSER_MODEL,
-        tokPerSec,
-        type: "browser",
-      });
-
-      setStatus("ready");
-      setUptime(0);
-      uptimeRef.current = setInterval(() => setUptime((u) => u + 1), 1000);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to start worker");
-      setStatus("error");
-      void stopWorker();
-    }
-  }, [walletAddr, webgpu, socket, stopWorker]);
-
-  stopWorkerRef.current = stopWorker;
-  useEffect(() => () => { void stopWorkerRef.current(); }, []);
 
   const isReady = status === "ready" || status === "working";
   const statusLabel =
@@ -243,7 +88,7 @@ export function BrowserWorkerPanel() {
             <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, fontWeight: 700, color: statusColor }}>
               <span className={isReady ? "pulse" : ""} style={{ width: 6, height: 6, borderRadius: "50%", background: statusColor }} />
               {statusLabel}
-              {socket.connected && <span style={{ color: "var(--green)", marginLeft: 4 }}>· WS</span>}
+              {socketConnected && <span style={{ color: "var(--green)", marginLeft: 4 }}>· WS</span>}
             </span>
           </div>
 
@@ -331,24 +176,21 @@ export function BrowserWorkerPanel() {
             </button>
           )}
 
-          <p style={{ marginTop: 12, fontSize: 11, color: "var(--text-muted)", lineHeight: 1.55 }}>
-            Jobs arrive over WebSocket from the router. Chat requests in Console route here when your worker is online.
-          </p>
         </div>
 
         <div className="card">
           <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 14 }}>NETWORK</div>
           <div style={{ height: 160 }}>
             <NetworkGraph
-              activeWorkers={network?.active_workers ?? socket.stats?.ws_workers_online ?? 0}
+              activeWorkers={network?.active_workers ?? socketStats?.ws_workers_online ?? 0}
               totalWorkers={network?.total_workers ?? 0}
               isYouActive={isReady}
             />
           </div>
-          {(socket.stats || network) && (
+          {(socketStats || network) && (
             <div style={{ marginTop: 12, fontSize: 11, color: "var(--text-muted)", lineHeight: 1.6 }}>
-              {socket.stats && (
-                <div>{socket.stats.ws_workers_online} WS workers · {socket.stats.jobs_in_queue} queued</div>
+              {socketStats && (
+                <div>{socketStats.ws_workers_online} Workers · {socketStats.jobs_in_queue} queued</div>
               )}
               {network && (
                 <div>{network.jobs_total} jobs · p99 {network.p99_ttft_ms}ms</div>

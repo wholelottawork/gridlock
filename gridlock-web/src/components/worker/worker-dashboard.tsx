@@ -9,12 +9,14 @@ import {
   fetchWorker,
   fetchLeaderboard,
   subscribeLive,
+  setWorkerStatus,
   type ApiWorker,
   type ApiJob,
 } from "@/lib/api-client";
 import { fmt } from "@/lib/utils";
+import { useBrowserWorker } from "@/context/browser-worker-context";
 
-type WorkerState = "Active" | "Paused" | "Draining";
+type WorkerState = "Active" | "Paused" | "Stopping";
 
 function generateLatencyPoints(n = 20) {
   return Array.from({ length: n }, (_, i) => ({
@@ -35,7 +37,9 @@ function jobsToLatency(jobs: ApiJob[]) {
 
 export function WorkerDashboard() {
   const { publicKey, connected } = useWallet();
+  const browserWorker = useBrowserWorker();
   const [mounted, setMounted] = useState(false);
+  const [statusBusy, setStatusBusy] = useState(false);
 
   // Real API state
   const [workerData, setWorkerData]   = useState<ApiWorker | null>(null);
@@ -52,8 +56,8 @@ export function WorkerDashboard() {
   const [earnings, setEarnings]       = useState({ lock: 142.38, confidentialPremium: 9.44 });
   const [slaPass, setSlaPass]         = useState(98.2);
   const [goodput, setGoodput]         = useState(847);
-  const [inFlight, setInFlight]       = useState(3);
-  const drainTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [inFlight, setInFlight]       = useState(0);
+  const stoppingRef = useRef(false);
 
   useEffect(() => { setMounted(true); }, []);
 
@@ -65,7 +69,7 @@ export function WorkerDashboard() {
       setNotRegistered(false);
       setApiJobs(wd.recent_jobs ?? []);
       setConfidential(wd.is_confidential);
-      if (wd.status === "Active" || wd.status === "Paused" || wd.status === "Draining") {
+      if (wd.status === "Active" || wd.status === "Paused" || wd.status === "Stopping") {
         setStatus(wd.status);
       }
       const points = jobsToLatency(wd.recent_jobs ?? []);
@@ -141,16 +145,55 @@ export function WorkerDashboard() {
     return () => clearInterval(id);
   }, [status, confidential, workerData]);
 
-  function handleToggle() {
-    if (status === "Active") {
-      setStatus("Draining");
-      drainTimerRef.current = setTimeout(() => { setStatus("Paused"); setInFlight(0); }, 3000);
-    } else if (status === "Paused") {
-      setStatus("Active");
-      setInFlight(Math.floor(Math.random() * 5) + 1);
-    } else {
-      if (drainTimerRef.current) clearTimeout(drainTimerRef.current);
-      setStatus("Paused");
+  const finishPause = useCallback(async (addr: string) => {
+    stoppingRef.current = false;
+    if (browserWorker.status !== "offline") {
+      await browserWorker.stopWorker();
+    }
+    await setWorkerStatus(addr, "Paused");
+    setStatus("Paused");
+    setInFlight(0);
+    void refreshWorkerData(addr);
+  }, [browserWorker, refreshWorkerData]);
+
+  // Finish pausing once the current browser job completes.
+  useEffect(() => {
+    if (status !== "Stopping" || !publicKey || !stoppingRef.current) return;
+    const busy = browserWorker.status === "working" || browserWorker.currentJobId !== null;
+    setInFlight(busy ? 1 : 0);
+    if (busy) return;
+    void finishPause(publicKey.toBase58());
+  }, [status, publicKey, browserWorker.status, browserWorker.currentJobId, finishPause]);
+
+  async function handleToggle() {
+    if (!publicKey || !connected) return;
+    const addr = publicKey.toBase58();
+    if (statusBusy) return;
+
+    setStatusBusy(true);
+    try {
+      if (status === "Active") {
+        const jobInFlight = browserWorker.status === "working" || browserWorker.currentJobId !== null;
+        if (jobInFlight) {
+          stoppingRef.current = true;
+          await setWorkerStatus(addr, "Stopping");
+          setStatus("Stopping");
+          setInFlight(1);
+        } else {
+          await finishPause(addr);
+        }
+      } else if (status === "Paused") {
+        await setWorkerStatus(addr, "Active");
+        setStatus("Active");
+        void refreshWorkerData(addr);
+      } else {
+        stoppingRef.current = false;
+        await finishPause(addr);
+      }
+    } catch (e) {
+      console.error("Worker status toggle failed:", e);
+    } finally {
+      setStatusBusy(false);
     }
   }
 
@@ -167,7 +210,7 @@ export function WorkerDashboard() {
     : "7xKm…b3Rq";
 
   const jobs       = apiJobs ?? mockJobs;
-  const statusColor = status === "Active" ? "var(--green)" : status === "Draining" ? "var(--yellow)" : "var(--text-secondary)";
+  const statusColor = status === "Active" ? "var(--green)" : status === "Stopping" ? "var(--yellow)" : "var(--text-secondary)";
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }}
@@ -222,19 +265,31 @@ export function WorkerDashboard() {
           <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 16 }}>STATUS & CONTROLS</div>
           <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 10 }}>
-              <button onClick={handleToggle} style={{
+              <button
+                type="button"
+                onClick={() => void handleToggle()}
+                disabled={!connected || notRegistered || statusBusy}
+                style={{
                 width: "100%", height: 56, borderRadius: 8,
-                background: status === "Active" ? "#FFFFFF" : status === "Draining" ? "var(--bg-3)" : "var(--bg-3)",
-                border: "none", cursor: "pointer", fontSize: 14, fontWeight: 800,
+                background: status === "Active" ? "#FFFFFF" : status === "Stopping" ? "var(--bg-3)" : "var(--bg-3)",
+                border: "none", cursor: connected && !notRegistered && !statusBusy ? "pointer" : "not-allowed",
+                fontSize: 14, fontWeight: 800,
                 color: status === "Active" ? "#000000" : "var(--text-secondary)",
+                opacity: connected && !notRegistered ? 1 : 0.5,
                 transition: "all 0.2s",
               }}>
-                {status === "Active" ? "ACTIVE — Click to Pause" : status === "Draining" ? `Draining ${inFlight} jobs…` : "PAUSED — Click to Resume"}
+                {statusBusy
+                  ? "Updating…"
+                  : status === "Active"
+                    ? "ACTIVE — Click to Pause"
+                    : status === "Stopping"
+                      ? "STOPPING — finishing current job…"
+                      : "PAUSED — Click to Resume"}
               </button>
               <div style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "center", fontWeight: 700 }}>
-                {status === "Active" && "Graceful drain on pause — no penalty"}
-                {status === "Draining" && `Waiting for ${inFlight} in-flight jobs to complete`}
-                {status === "Paused" && "Not accepting new requests"}
+                {status === "Active" && "Stops browser + native workers for your wallet"}
+                {status === "Stopping" && "Your current job will finish, then all workers pause"}
+                {status === "Paused" && "Not accepting new requests — restart browser worker on Start Earning to go live"}
               </div>
             </div>
 
