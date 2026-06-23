@@ -1,42 +1,29 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
+import {
+  DESKTOP_WORKER_DOWNLOADS,
+  WORKER_APP_VERSION,
+  detectDesktopPlatform,
+  type DesktopWorkerPlatform,
+} from "@/lib/worker-downloads";
 
-type OS = "macos" | "windows" | "linux";
-
-const NODE_INSTALL: Record<OS, string> = {
-  macos: "brew install node",
-  windows: "winget install OpenJS.NodeJS",
-  linux: "sudo apt install -y nodejs npm",
-};
+const PLATFORMS: DesktopWorkerPlatform[] = ["windows", "mac", "linux"];
 
 export function DesktopWorkerPanel() {
   const { publicKey } = useWallet();
-  const [os, setOs] = useState<OS>("macos");
-  const [copied, setCopied] = useState(false);
+  const [platform, setPlatform] = useState<DesktopWorkerPlatform>("windows");
 
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
-  const wallet = publicKey?.toBase58() ?? "YOUR_WALLET_ADDRESS";
+  const walletHint = publicKey
+    ? `${publicKey.toBase58().slice(0, 4)}…${publicKey.toBase58().slice(-4)}`
+    : null;
 
   useEffect(() => {
-    const p = (navigator.platform || navigator.userAgent || "").toLowerCase();
-    if (p.includes("win")) setOs("windows");
-    else if (p.includes("linux")) setOs("linux");
-    else setOs("macos");
+    setPlatform(detectDesktopPlatform());
   }, []);
 
-  const daemonCommand = `GRIDLOCK_BACKEND_URL=${apiUrl} GRIDLOCK_WALLET=${wallet} python python/daemon.py`;
-  const electronCommand = `cd gridlock-worker && npm install && npm run dev`;
-
-  function copy(text: string) {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }
-
   return (
-    <div className="card card-orange" style={{ position: "relative", height: "100%" }}>
+    <div className="card card-orange" style={{ position: "relative", height: "100%", display: "flex", flexDirection: "column" }}>
       <span style={{
         position: "absolute", top: 16, right: 16,
         fontSize: 10, fontWeight: 700, letterSpacing: "0.5px",
@@ -48,92 +35,77 @@ export function DesktopWorkerPanel() {
       </span>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-        <svg width={22} height={22} viewBox="0 0 24 24" fill="var(--orange)">
+        <svg width={20} height={20} viewBox="0 0 24 24" fill="var(--orange)">
           <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z" />
         </svg>
-        <div style={{ fontSize: 20, fontWeight: 800 }}>Desktop Worker</div>
+        <div>
+          <div style={{ fontSize: 18, fontWeight: 800 }}>Desktop Worker</div>
+          <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 4 }}>Gridlock Worker app · v{WORKER_APP_VERSION}</div>
+        </div>
       </div>
 
-      <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 20, lineHeight: 1.6, maxWidth: 520 }}>
-        Run the Gridlock Electron app + Python daemon on your NVIDIA GPU. Handles registration, heartbeats, and inference — highest throughput and earnings.
-      </div>
+      <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 16, lineHeight: 1.6 }}>
+        Install the desktop app for earnings, live jobs, and GPU settings. Includes the worker daemon — no terminal required.
+      </p>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18, fontSize: 13, color: "var(--text-secondary)" }}>
-        <div>1. Clone the repo and open <code style={{ color: "var(--orange)" }}>gridlock-worker</code></div>
-        <div>2. Copy the command below (wallet + backend URL pre-filled when connected)</div>
-        <div>3. Run in terminal — daemon registers and starts polling for jobs</div>
+      <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 10 }}>
+        DOWNLOAD
       </div>
-
-      <div style={{ marginBottom: 10, fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px" }}>
-        PYTHON DAEMON (headless)
-      </div>
-      <div style={{
-        display: "flex", alignItems: "center", gap: 8,
-        background: "var(--bg-0)", border: "1px solid var(--border)",
-        borderRadius: 8, padding: "10px 12px", marginBottom: 14, overflowX: "auto",
-      }}>
-        <code style={{ flex: 1, fontSize: 11, color: "var(--orange)", whiteSpace: "nowrap" }}>{daemonCommand}</code>
-        <button
-          type="button"
-          onClick={() => copy(daemonCommand)}
-          style={{
-            flexShrink: 0, padding: "6px 12px", borderRadius: 6, fontSize: 11, fontWeight: 700,
-            border: "1px solid var(--border)", background: "var(--bg-3)", color: "var(--text-secondary)", cursor: "pointer",
-          }}
-        >
-          {copied ? "Copied!" : "Copy"}
-        </button>
-      </div>
-
-      <div style={{ marginBottom: 10, fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px" }}>
-        ELECTRON APP (UI + daemon)
-      </div>
-      <div style={{
-        display: "flex", alignItems: "center", gap: 8,
-        background: "var(--bg-0)", border: "1px solid var(--border)",
-        borderRadius: 8, padding: "10px 12px", marginBottom: 18, overflowX: "auto",
-      }}>
-        <code style={{ flex: 1, fontSize: 11, color: "var(--text-secondary)", whiteSpace: "nowrap" }}>{electronCommand}</code>
-        <button
-          type="button"
-          onClick={() => copy(electronCommand)}
-          style={{
-            flexShrink: 0, padding: "6px 12px", borderRadius: 6, fontSize: 11, fontWeight: 700,
-            border: "1px solid var(--border)", background: "var(--bg-3)", color: "var(--text-secondary)", cursor: "pointer",
-          }}
-        >
-          Copy
-        </button>
-      </div>
-
-      <div style={{ borderTop: "1px solid var(--border)", paddingTop: 16 }}>
-        <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 8 }}>Need Node.js 18+?</div>
-        <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-          {(["macos", "windows", "linux"] as const).map((o) => (
-            <button
-              key={o}
-              type="button"
-              onClick={() => setOs(o)}
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 18 }}>
+        {PLATFORMS.map((key) => {
+          const dl = DESKTOP_WORKER_DOWNLOADS[key];
+          const isSuggested = key === platform;
+          return (
+            <a
+              key={key}
+              href={dl.url}
+              download={dl.filename}
               style={{
-                padding: "4px 10px", borderRadius: 5, fontSize: 11, fontWeight: 700, cursor: "pointer",
-                border: `1px solid ${os === o ? "rgba(255,160,0,0.4)" : "var(--border)"}`,
-                background: os === o ? "rgba(255,160,0,0.1)" : "transparent",
-                color: os === o ? "var(--orange)" : "var(--text-muted)",
+                display: "flex", alignItems: "center", justifyContent: "space-between",
+                padding: "12px 14px", borderRadius: 8, textDecoration: "none",
+                border: `1px solid ${isSuggested ? "rgba(255,160,0,0.45)" : "var(--border)"}`,
+                background: isSuggested ? "rgba(255,160,0,0.08)" : "var(--bg-0)",
+                color: "inherit",
+                transition: "border-color 0.15s, background 0.15s",
               }}
             >
-              {o === "macos" ? "macOS" : o === "windows" ? "Windows" : "Linux"}
-            </button>
-          ))}
-        </div>
-        <div style={{
-          background: "var(--bg-0)", border: "1px solid var(--border)",
-          borderRadius: 8, padding: "8px 12px", fontFamily: "monospace", fontSize: 11, color: "var(--text-secondary)",
-        }}>
-          {NODE_INSTALL[os]}
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 800, color: isSuggested ? "var(--orange)" : "var(--text-primary)" }}>
+                  {dl.label}
+                </div>
+                <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 2 }}>{dl.filename}</div>
+              </div>
+              <span style={{
+                fontSize: 11, fontWeight: 800, padding: "6px 12px", borderRadius: 6,
+                background: isSuggested ? "#FFFFFF" : "var(--bg-3)",
+                color: isSuggested ? "#000" : "var(--text-secondary)",
+              }}>
+                Download
+              </span>
+            </a>
+          );
+        })}
+      </div>
+
+      <ol style={{ margin: "0 0 4px", paddingLeft: 18, fontSize: 12, color: "var(--text-secondary)", lineHeight: 1.7 }}>
+        <li>Install the app for your operating system</li>
+        <li>Open <strong>Gridlock Worker</strong> and connect your wallet{walletHint ? ` (${walletHint})` : ""}</li>
+        <li>Click <strong>Start</strong> — jobs arrive automatically</li>
+      </ol>
+
+      <div style={{ marginTop: "auto", paddingTop: 16, borderTop: "1px solid var(--border)" }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <div style={{ background: "var(--bg-3)", borderRadius: 8, padding: 10 }}>
+            <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, marginBottom: 4 }}>REQUIRES</div>
+            <div style={{ fontSize: 12, fontWeight: 700 }}>NVIDIA GPU · CUDA</div>
+          </div>
+          <div style={{ background: "var(--bg-3)", borderRadius: 8, padding: 10 }}>
+            <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, marginBottom: 4 }}>JOBS VIA</div>
+            <div style={{ fontSize: 12, fontWeight: 700 }}>WebSocket</div>
+          </div>
         </div>
         <p style={{ marginTop: 12, fontSize: 11, color: "var(--text-muted)", lineHeight: 1.55 }}>
-          Requires NVIDIA GPU (CUDA). Connects via WebSocket (<code>/v1/ws</code>) for job dispatch.
-          Install <code>pip install websocket-client</code> for native WS support.
+          Server or headless setup? Use <strong>Native Worker</strong> instead.
         </p>
       </div>
     </div>

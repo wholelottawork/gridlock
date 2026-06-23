@@ -287,7 +287,7 @@ export function WorkerDashboard() {
                       : "PAUSED — Click to Resume"}
               </button>
               <div style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "center", fontWeight: 700 }}>
-                {status === "Active" && "Stops browser + native workers for your wallet"}
+                {status === "Active" && "Stops all workers connected to your wallet"}
                 {status === "Stopping" && "Your current job will finish, then all workers pause"}
                 {status === "Paused" && "Not accepting new requests — restart browser worker on Start Earning to go live"}
               </div>
@@ -460,7 +460,7 @@ export function WorkerDashboard() {
 
         <div className="card">
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 }}>
-            <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px" }}>RECENT JOBS</div>
+            <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px" }}>JOB HISTORY</div>
             {workerData && (
               <span style={{ fontSize: 10, color: "var(--green)", fontWeight: 700, background: "rgba(34,204,102,0.08)", borderRadius: 4, padding: "2px 8px" }}>
                 LIVE

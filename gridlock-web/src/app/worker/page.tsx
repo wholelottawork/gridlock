@@ -3,6 +3,7 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import { BrowserWorkerPanel } from "@/components/worker/browser-worker-panel";
 import { DesktopWorkerPanel } from "@/components/worker/desktop-worker-panel";
+import { NativeWorkerPanel } from "@/components/worker/native-worker-panel";
 import { WorkerDashboard } from "@/components/worker/worker-dashboard";
 
 type Tab = "earn" | "dashboard";
@@ -20,8 +21,8 @@ export default function WorkerPage() {
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 28, gap: 16, flexWrap: "wrap" }}>
         <div>
           <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 4, letterSpacing: "-0.3px" }}>Worker</h1>
-          <p style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 700, maxWidth: 520 }}>
-            Run inference on the network and earn $LOCK. Start a browser worker or deploy the desktop app on your GPU.
+          <p style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 700, maxWidth: 640 }}>
+            Run inference on the network and earn $LOCK. Choose browser, desktop, or native worker for your setup.
           </p>
         </div>
       </div>
@@ -45,7 +46,15 @@ export default function WorkerPage() {
       {tab === "earn" ? (
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <BrowserWorkerPanel />
-          <DesktopWorkerPanel />
+          <div style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            gap: 14,
+            alignItems: "stretch",
+          }}>
+            <DesktopWorkerPanel />
+            <NativeWorkerPanel />
+          </div>
         </div>
       ) : (
         <WorkerDashboard />
