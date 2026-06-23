@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, shell } from 'electron'
+import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, shell, type NativeImage } from 'electron'
 import { join } from 'path'
 import { spawn, ChildProcess } from 'child_process'
 import { loadSettings, saveSettings, GRIDLOCK_API_URL, type WorkerSettings } from './settings.js'
@@ -11,6 +11,21 @@ let tray: Tray | null = null
 let daemon: ChildProcess | null = null
 const DAEMON_PORT = 7420
 
+function iconPath(): string {
+  if (app.isPackaged) {
+    return join(process.resourcesPath, 'icon.png')
+  }
+  return join(__dirname, '../../build/icon.png')
+}
+
+function loadAppIcon(size?: number): NativeImage {
+  const image = nativeImage.createFromPath(iconPath())
+  if (size && !image.isEmpty()) {
+    return image.resize({ width: size, height: size })
+  }
+  return image
+}
+
 function createWindow(): void {
   mainWindow = new BrowserWindow({
     width: 1060,
@@ -20,6 +35,7 @@ function createWindow(): void {
     backgroundColor: '#0a0a0a',
     titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
     frame: false,
+    icon: iconPath(),
     show: false,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -43,8 +59,8 @@ function createWindow(): void {
 }
 
 function createTray(): void {
-  const icon = nativeImage.createEmpty()
-  tray = new Tray(icon)
+  const icon = loadAppIcon(process.platform === 'win32' ? 16 : 22)
+  tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon)
   const menu = Menu.buildFromTemplate([
     { label: 'Show Gridlock Worker', click: () => { mainWindow?.show(); mainWindow?.focus() } },
     { type: 'separator' },

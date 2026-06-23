@@ -77,9 +77,77 @@ npm run bundle-python
 
 ---
 
-## Code signing (optional)
+## Icons (app + installer)
 
-Unsigned builds may show Windows SmartScreen. Add GitHub secrets `CSC_LINK` and `CSC_KEY_PASSWORD` for signed releases.
+electron-builder picks up `build/icon.ico` for:
+
+- The installed `.exe` and Start Menu shortcut
+- The NSIS setup wizard (`Gridlock-Worker-Setup-x.y.z.exe`)
+
+Regenerate from the Gridlock chevron mark:
+
+```powershell
+npm run generate-icons
+```
+
+Requires Python 3 + Pillow (`pip install pillow`). Icons are regenerated automatically before `npm run package`.
+
+Replace `build/icon.png` / `build/icon.ico` with your own artwork anytime (ICO should include 16–256 px sizes).
+
+---
+
+## Code signing (SmartScreen / Defender)
+
+**You cannot fully remove the “Windows protected your PC” / SmartScreen warning without code signing.** Unsigned or unknown publishers always get flagged. Icons do not affect this.
+
+### What users see today (unsigned)
+
+SmartScreen shows “Publisher: Unknown”. Users can click **More info → Run anyway**. That is normal for unsigned builds.
+
+### Proper fix: Authenticode signing
+
+1. Buy a **Windows code signing certificate** from a trusted CA (DigiCert, Sectigo, SSL.com, etc.).
+   - **Standard OV cert** (~$200–400/yr): signs the app; SmartScreen reputation builds over time as downloads accumulate.
+   - **EV cert** (~$400–600/yr): usually gets SmartScreen trust immediately; requires hardware token/USB.
+
+2. Export the certificate as a **`.pfx`** file (private key + cert).
+
+3. Add GitHub repository secrets:
+
+   | Secret | Value |
+   |--------|--------|
+   | `CSC_LINK` | Base64-encoded `.pfx` (`base64 -i cert.pfx` on macOS/Linux, `[Convert]::ToBase64String` on Windows) |
+   | `CSC_KEY_PASSWORD` | PFX export password |
+
+4. Update the release workflow to sign when secrets exist (remove `CSC_IDENTITY_AUTO_DISCOVERY: false` or set it only when secrets are missing).
+
+Example workflow env block:
+
+```yaml
+env:
+  CSC_LINK: ${{ secrets.CSC_LINK }}
+  CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+```
+
+electron-builder signs the `.exe` and installer automatically when `CSC_LINK` is set.
+
+### Optional: timestamp server
+
+Most CAs embed this; if needed:
+
+```yaml
+env:
+  WIN_CSC_ARGS: "-tr http://timestamp.digicert.com -td sha256"
+```
+
+### What does *not* fix SmartScreen
+
+- Custom icons
+- GitHub Releases hosting
+- VirusTotal scans
+- Telling users to disable Defender
+
+Only signing (and eventually reputation for OV certs) addresses the publisher warning.
 
 ---
 

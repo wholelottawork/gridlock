@@ -7,19 +7,27 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "bundle-python": "node scripts/bundle-python.cjs",
-    "prepackage": "node scripts/bundle-python.cjs",
+    "generate-icons": "python3 scripts/generate-icons.py",
+    "prepackage": "python3 scripts/generate-icons.py && node scripts/bundle-python.cjs",
     "package": "npm run build && electron-builder",
     "preview": "electron-vite preview"
   },
   "build": {
     "appId": "network.gridlock.worker",
     "productName": "Gridlock Worker",
+    "icon": "build/icon.ico",
     "directories": {
       "output": "release"
     },
     "win": {
       "target": "nsis",
+      "icon": "build/icon.ico",
       "artifactName": "Gridlock-Worker-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico"
     },
     "mac": {
       "target": "dmg",
@@ -30,6 +38,10 @@
       "artifactName": "Gridlock-Worker-${version}.${ext}"
     },
     "extraResources": [
+      {
+        "from": "build/icon.png",
+        "to": "icon.png"
+      },
       {
         "from": "python",
         "to": "python",

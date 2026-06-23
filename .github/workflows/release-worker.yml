@@ -43,10 +43,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install Python icon deps
+        run: pip install pillow
+
       - name: Build installer
         run: npm run package
         env:
-          # Skip code signing (optional: set CSC_LINK + CSC_KEY_PASSWORD secrets to sign)
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           CSC_IDENTITY_AUTO_DISCOVERY: false
 
       - name: Upload artifact
