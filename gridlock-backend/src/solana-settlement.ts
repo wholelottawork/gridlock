@@ -12,6 +12,7 @@ import {
   TransactionMessage,
   VersionedTransaction,
 } from "@solana/web3.js";
+import { parseAttestationHash } from "./attestation.js";
 import { config, PROGRAM_IDS } from "./config.js";
 import { solanaRpc } from "./solana.js";
 import type { WorkerRecord } from "./types.js";
@@ -212,6 +213,7 @@ export async function anchorCommitReceipt(
   tpotMs: number,
   slaMet: boolean,
   confidential: boolean,
+  attestationHash: string | null = null,
 ): Promise<boolean> {
   if (!config.solanaSettlementEnabled) return false;
   const kp = loadKeypair();
@@ -219,6 +221,7 @@ export async function anchorCommitReceipt(
 
   const id = jobIdBytes(jobId);
   const receipt = derivePda(PROGRAM_IDS.slaRegistry, [Buffer.from("receipt"), id]);
+  const attestationBytes = confidential ? parseAttestationHash(attestationHash) : null;
   const data = Buffer.concat([
     anchorDiscriminator("commit_receipt"),
     id,
@@ -228,7 +231,7 @@ export async function anchorCommitReceipt(
     Buffer.alloc(64),
     borshBool(slaMet),
     borshBool(confidential),
-    borshOptionBytes32(null),
+    borshOptionBytes32(attestationBytes),
   ]);
   return sendAndConfirm(PROGRAM_IDS.slaRegistry, data, [
     { pubkey: kp.publicKey, isSigner: true, isWritable: true },
@@ -321,12 +324,13 @@ export async function runOnChainSettlement(
   confidential: boolean,
   worker: WorkerRecord,
   fee: number,
+  attestationHash: string | null = null,
 ): Promise<void> {
   if (!config.solanaSettlementEnabled) return;
 
   const amountBase = Math.floor(fee * 1_000_000_000);
 
-  if (!(await anchorCommitReceipt(jobId, slaTier, ttftMs, tpotMs, slaMet, confidential))) {
+  if (!(await anchorCommitReceipt(jobId, slaTier, ttftMs, tpotMs, slaMet, confidential, attestationHash))) {
     console.log("[solana] settlement aborted: commit_receipt failed");
     return;
   }

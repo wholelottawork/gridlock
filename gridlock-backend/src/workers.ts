@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { config, computeFee, PENALTY_MULT, SLA_TARGETS } from "./config.js";
 import { dbUpsertWorker } from "./db.js";
 import { appendJob, jobsStore, setWorkersRegistry, workersRegistry } from "./state.js";
+import { slaTiersForWorker } from "./tee-capacity.js";
 import type { JobRecord, WorkerRecord } from "./types.js";
 
 const HARDWARE_TIERS = ["RTX 4090", "RTX 3090", "A100 80G", "H100 SXM", "RTX 5090", "A6000"];
@@ -25,14 +26,11 @@ export function seedWorkers(): WorkerRecord[] {
   for (let i = 0; i < 20; i++) {
     const role = ROLES[i % 4]!;
     const tee = Math.random() > 0.45;
-    const tiers = ["batch", "standard"];
-    if (Math.random() > 0.4) tiers.push("realtime");
-    if (tee && Math.random() > 0.5) tiers.push("confidential");
     out.push({
       address: randomAddress(),
       role,
       endpoint: config.vllmEndpoint,
-      sla_tiers: tiers,
+      sla_tiers: slaTiersForWorker(tee),
       tee_capable: tee,
       reliability_score: Math.floor(Math.random() * 3400) + 6500,
       goodput_score: Math.floor(Math.random() * 1600) + 200,
@@ -80,7 +78,7 @@ export function seedJobs(workers: WorkerRecord[]): void {
       penalty_paid: met ? null : Math.round(fee * PENALTY_MULT[tier]! * 10000) / 10000,
       fee,
       status: "settled",
-      attestation_hash: tier === "confidential" ? `attest_${jobId.slice(0, 16)}` : null,
+      attestation_hash: null,
     });
   }
 }

@@ -5,6 +5,7 @@ import { anchorRegisterWorker } from "../solana.js";
 import { jobsStore, workersRegistry } from "../state.js";
 import type { HeartbeatRequest, RegisterWorkerRequest, SetWorkerStatusRequest, WorkerRecord } from "../types.js";
 import { recomputeWorkerStats } from "../worker-stats.js";
+import { slaTiersForWorker } from "../tee-capacity.js";
 import { workerHub } from "../ws/hub.js";
 
 export const workerRoutes = new Hono();
@@ -44,19 +45,21 @@ workerRoutes.post("/v1/workers/register", async (c) => {
     return c.json({ error: "Worker already registered" }, 409);
   }
 
+  const tee = req.tee_capable ?? false;
+
   const tx = await anchorRegisterWorker(
     req.operator_pubkey,
     req.role,
     req.hardware_tier,
-    req.tee_capable ?? false,
+    tee,
   );
 
   const newWorker: WorkerRecord = {
     address: req.operator_pubkey,
     role: req.role,
     endpoint: req.endpoint || config.vllmEndpoint,
-    sla_tiers: ["batch", "standard"],
-    tee_capable: req.tee_capable ?? false,
+    sla_tiers: slaTiersForWorker(tee),
+    tee_capable: tee,
     reliability_score: 5000,
     goodput_score: 0,
     sla_pass_rate: 100.0,
@@ -67,7 +70,7 @@ workerRoutes.post("/v1/workers/register", async (c) => {
     jobs_today: 0,
     earnings_today: 0,
     penalties_paid: 0,
-    is_confidential: false,
+    is_confidential: req.is_confidential ?? tee,
     stake_token_account: config.defaultWorkerStake || undefined,
     last_heartbeat: Date.now() / 1000,
     registered_at: Date.now() / 1000,
@@ -118,4 +121,22 @@ workerRoutes.post("/v1/workers/:address/status", async (c) => {
     status: worker.status,
     in_flight: workerHub.inFlightCount(address),
   });
+});
+
+workerRoutes.patch("/v1/workers/:address/confidential", async (c) => {
+  const address = c.req.param("address");
+  const worker = workersRegistry.find((w) => w.address === address);
+  if (!worker) return c.json({ error: "Worker not found" }, 404);
+
+  const body = (await c.req.json()) as { enabled?: boolean };
+  if (typeof body.enabled !== "boolean") {
+    return c.json({ error: "enabled (boolean) is required" }, 400);
+  }
+  if (body.enabled && !worker.tee_capable) {
+    return c.json({ error: "Worker is not TEE-capable — re-register with tee_capable: true" }, 400);
+  }
+
+  worker.is_confidential = body.enabled;
+  void dbUpsertWorker(worker);
+  return c.json({ ok: true, is_confidential: worker.is_confidential });
 });

@@ -7,6 +7,7 @@ import {
   WORKER_APP_VERSION,
   nativeWorkerCommand,
   nativeWorkerSetupCommand,
+  nativeWorkerTeeCommand,
 } from "@/lib/worker-downloads";
 
 export function NativeWorkerPanel() {
@@ -15,6 +16,7 @@ export function NativeWorkerPanel() {
 
   const wallet = publicKey?.toBase58() ?? "YOUR_WALLET_ADDRESS";
   const runCommand = nativeWorkerCommand(wallet);
+  const teeCommand = nativeWorkerTeeCommand(wallet);
 
   useEffect(() => {
     setCopied(null);
@@ -86,6 +88,19 @@ export function NativeWorkerPanel() {
         onCopy={() => copy(runCommand, "run")}
         accent
       />
+
+      <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", margin: "14px 0 8px" }}>
+        CONFIDENTIAL / TEE JOBS (DEV OR H100)
+      </div>
+      <CommandRow
+        label={teeCommand}
+        copied={copied === "tee"}
+        onCopy={() => copy(teeCommand, "tee")}
+        muted
+      />
+      <p style={{ marginTop: 8, fontSize: 11, color: "var(--text-muted)", lineHeight: 1.55 }}>
+        Serves privacy jobs from the Console. Consumer RTX uses dev attestation; production needs H100 Confidential Computing.
+      </p>
 
       <div style={{ marginTop: "auto", paddingTop: 16, borderTop: "1px solid var(--border)" }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>

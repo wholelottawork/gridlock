@@ -65,8 +65,9 @@ export interface RegisterWorkerRequest {
   operator_pubkey: string;
   role: string;
   hardware_tier: string;
-  tee_capable?: boolean;
   endpoint?: string;
+  tee_capable?: boolean;
+  is_confidential?: boolean;
 }
 
 export interface HeartbeatRequest {

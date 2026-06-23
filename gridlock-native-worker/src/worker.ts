@@ -8,6 +8,7 @@ import {
   runInference,
   type ChatMessage,
 } from "./inference.js";
+import { computeJobAttestationHash } from "./attestation.js";
 import type { InferenceBackend } from "./config.js";
 
 interface WorkerOptions {
@@ -47,7 +48,8 @@ async function ensureRegistered(wallet: string, backendUrl: string, hardwareTier
     operator_pubkey: wallet,
     role: process.env.GRIDLOCK_ROLE ?? "Prefill",
     hardware_tier: hardwareTier,
-    tee_capable: false,
+    tee_capable: process.env.GRIDLOCK_TEE_CAPABLE === "true",
+    is_confidential: process.env.GRIDLOCK_TEE_CAPABLE === "true",
     endpoint: `native://${hardwareTier.toLowerCase().replace(/\s+/g, "-")}`,
   });
 }
@@ -111,8 +113,12 @@ export async function startWorker(options: WorkerOptions): Promise<void> {
           log(`Job ${jobId.slice(0, 12)}…`);
 
           const messages = (msg.messages as ChatMessage[]) ?? [];
+          const confidential = msg.confidential === true || msg.sla_tier === "confidential";
           try {
             const result = await runInference(messages);
+            const attestationHash = confidential
+              ? computeJobAttestationHash(jobId, wallet, result.content)
+              : null;
             ws.send(
               JSON.stringify({
                 type: "job:complete",
@@ -121,6 +127,7 @@ export async function startWorker(options: WorkerOptions): Promise<void> {
                 tokens_generated: result.tokens,
                 ttft_ms: result.ttftMs,
                 tpot_ms: result.tpotMs,
+                attestation_hash: attestationHash,
               }),
             );
             log(`Job ${jobId.slice(0, 12)}… done (${result.tokens} tokens)`);

@@ -16,6 +16,7 @@ export async function settleJob(
   confidential: boolean,
   worker: WorkerRecord,
   fee: number,
+  attestationHash: string | null = null,
 ): Promise<void> {
   const penalty = slaMet ? null : fee * PENALTY_MULT[slaTier]!;
 
@@ -24,7 +25,7 @@ export async function settleJob(
   addLockBurned(fee * 0.1);
 
   if (config.solanaSettlementEnabled) {
-    await runOnChainSettlement(jobId, slaTier, ttftMs, tpotMs, slaMet, confidential, worker, fee);
+    await runOnChainSettlement(jobId, slaTier, ttftMs, tpotMs, slaMet, confidential, worker, fee, attestationHash);
   } else if (!settlementSkipLogged) {
     settlementSkipLogged = true;
     console.log(

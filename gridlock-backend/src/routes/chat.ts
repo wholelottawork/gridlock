@@ -1,14 +1,16 @@
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
+import { resolveJobAttestation, slaMetWithAttestation } from "../attestation.js";
 import { config, computeFee, PENALTY_MULT, SLA_TARGETS } from "../config.js";
 import { cacheSetTtl, cacheWarmCheck } from "../cache.js";
 import { settleJob, watcherSample } from "../settlement.js";
 import { anchorAssignWorker, anchorOpenJob } from "../solana-settlement.js";
-import { appendJob, workersRegistry } from "../state.js";
+import { appendJob } from "../state.js";
 import { createDispatchPayload, workerHub } from "../ws/hub.js";
+import { noWorkerResponse } from "../tee-capacity.js";
 import { hashPrefix, pickDecodeWorker, pickPrefillWorker } from "../workers.js";
-import type { ChatCompletionRequest, JobRecord } from "../types.js";
+import type { ChatCompletionRequest, JobRecord, WorkerRecord } from "../types.js";
 
 export const chatRoutes = new Hono();
 
@@ -49,11 +51,34 @@ function createJobRecord(
   return { status: "settling", ...partial };
 }
 
+function finalizeAttestation(params: {
+  confidential: boolean;
+  worker: WorkerRecord;
+  jobId: string;
+  response: string;
+  workerAttestationHash?: string | null;
+  ttftMs: number;
+  tpotMs: number;
+  targetTtft: number;
+  targetTpot: number;
+}) {
+  const latencyMet = params.ttftMs <= params.targetTtft && params.tpotMs <= params.targetTpot;
+  const attestation = resolveJobAttestation({
+    confidential: params.confidential,
+    worker: params.worker,
+    jobId: params.jobId,
+    response: params.response,
+    workerAttestationHash: params.workerAttestationHash,
+  });
+  const slaMet = slaMetWithAttestation(latencyMet, params.confidential, attestation);
+  return { attestation, slaMet, latencyMet };
+}
+
 chatRoutes.post("/v1/chat/completions", async (c) => {
   const req = (await c.req.json()) as ChatCompletionRequest;
   const jobId = randomUUID();
   const slaTier = req.gridlock?.sla && SLA_TARGETS[req.gridlock.sla] ? req.gridlock.sla : "standard";
-  const confidential = req.gridlock?.privacy ?? false;
+  const confidential = (req.gridlock?.privacy ?? false) || slaTier === "confidential";
   const prompt = req.messages.map((m) => m.content).join(" ");
   const promptTokens = prompt.split(/\s+/).filter(Boolean).length;
   const fee = computeFee(req.model, slaTier, promptTokens);
@@ -65,103 +90,107 @@ chatRoutes.post("/v1/chat/completions", async (c) => {
   const prefixKey = hashPrefix(prompt);
   const warm = await cacheWarmCheck(prefixKey);
 
-  // Route to WebSocket-connected workers (browser / native) when available
-  if (workerHub.hasConnectedWorkers(slaTier) && !req.stream) {
-    const wsSession = workerHub.pickIdleWorker(slaTier);
-    const registryWorker =
-      wsSession
-        ? workersRegistry.find((w) => w.address === wsSession.address)
-        : pickPrefillWorker(slaTier, confidential, warm);
+  const worker = pickPrefillWorker(slaTier, confidential, warm);
+  if (!worker) {
+    return c.json(noWorkerResponse(confidential), 503);
+  }
 
-    if (registryWorker) {
-      if (config.solanaSettlementEnabled) {
-        await anchorOpenJob(jobId, slaTier, fee, confidential);
-      }
+  const tryWsDispatch = !req.stream && workerHub.getIdleSession(worker.address);
 
-      const acceptTs = performance.now();
-      try {
-        const dispatch = createDispatchPayload({
-          jobId,
-          model: req.model,
-          messages: req.messages,
-          slaTier,
-          maxTokens: req.max_tokens ?? 512,
-          customer,
-        });
+  if (tryWsDispatch) {
+    if (config.solanaSettlementEnabled) {
+      await anchorOpenJob(jobId, slaTier, fee, confidential);
+      await anchorAssignWorker(jobId, worker.address);
+    }
 
-        if (config.solanaSettlementEnabled) {
-          await anchorAssignWorker(jobId, registryWorker.address);
-        }
+    const acceptTs = performance.now();
+    try {
+      const dispatch = createDispatchPayload({
+        jobId,
+        model: req.model,
+        messages: req.messages,
+        slaTier,
+        maxTokens: req.max_tokens ?? 512,
+        customer,
+        confidential,
+      });
 
-        const result = await workerHub.dispatch(dispatch);
-        const decodeWorker = pickDecodeWorker(slaTier, confidential);
-        const ttftMs = result.ttftMs || Math.floor(performance.now() - acceptTs);
-        const tpotMs = result.tpotMs || 0;
-        const slaMet = ttftMs <= targetTtft && tpotMs <= targetTpot;
-        const penalty = slaMet ? null : fee * PENALTY_MULT[slaTier]!;
+      const result = await workerHub.dispatchToWorker(worker.address, dispatch);
+      const decodeWorker = pickDecodeWorker(slaTier, confidential);
+      const ttftMs = result.ttftMs || Math.floor(performance.now() - acceptTs);
+      const tpotMs = result.tpotMs || 0;
+      const { attestation, slaMet } = finalizeAttestation({
+        confidential,
+        worker,
+        jobId,
+        response: result.content,
+        workerAttestationHash: result.attestationHash,
+        ttftMs,
+        tpotMs,
+        targetTtft,
+        targetTpot,
+      });
+      const penalty = slaMet ? null : fee * PENALTY_MULT[slaTier]!;
 
-        await cacheSetTtl(prefixKey, registryWorker.address);
+      await cacheSetTtl(prefixKey, worker.address);
 
-        const jobRecord = createJobRecord({
-          id: jobId,
-          customer,
-          model: req.model,
-          sla_tier: slaTier,
+      const jobRecord = createJobRecord({
+        id: jobId,
+        customer,
+        model: req.model,
+        sla_tier: slaTier,
+        ttft_ms: ttftMs,
+        tpot_ms: tpotMs,
+        sla_met: slaMet,
+        confidential,
+        worker: worker.address.slice(0, 8),
+        worker_address: worker.address,
+        decode_worker: decodeWorker?.address.slice(0, 8) ?? null,
+        ts: Date.now() / 1000,
+        penalty_paid: penalty,
+        fee,
+        cache_warm: warm !== null,
+        attestation_hash: attestation.hash,
+      });
+      appendJob(jobRecord);
+      void settleJob(jobId, slaTier, ttftMs, tpotMs, slaMet, confidential, worker, fee, attestation.hash);
+      watcherSample(jobId, ttftMs);
+
+      return c.json({
+        id: `chatcmpl-${jobId}`,
+        object: "chat.completion",
+        model: req.model,
+        choices: [{
+          index: 0,
+          message: { role: "assistant", content: result.content || "(no response)" },
+          finish_reason: "stop",
+        }],
+        usage: {
+          prompt_tokens: promptTokens,
+          completion_tokens: result.tokensGenerated,
+          total_tokens: promptTokens + result.tokensGenerated,
+        },
+        gridlock: {
+          job_id: jobId,
           ttft_ms: ttftMs,
           tpot_ms: tpotMs,
+          sla_tier: slaTier,
           sla_met: slaMet,
+          sla_target_ttft_ms: targetTtft,
+          worker: worker.address,
+          decode_worker: decodeWorker?.address ?? null,
           confidential,
-          worker: registryWorker.address.slice(0, 8),
-          worker_address: registryWorker.address,
-          decode_worker: decodeWorker?.address.slice(0, 8) ?? null,
-          ts: Date.now() / 1000,
-          penalty_paid: penalty,
-          fee,
+          penalty_due_lock: penalty,
+          fee_lock: fee,
           cache_warm: warm !== null,
-          attestation_hash: confidential ? `attest_${jobId.slice(0, 16)}` : null,
-        });
-        appendJob(jobRecord);
-        void settleJob(jobId, slaTier, ttftMs, tpotMs, slaMet, confidential, registryWorker, fee);
-        watcherSample(jobId, ttftMs);
-
-        return c.json({
-          id: `chatcmpl-${jobId}`,
-          object: "chat.completion",
-          model: req.model,
-          choices: [{
-            index: 0,
-            message: { role: "assistant", content: result.content || "(no response)" },
-            finish_reason: "stop",
-          }],
-          usage: {
-            prompt_tokens: promptTokens,
-            completion_tokens: result.tokensGenerated,
-            total_tokens: promptTokens + result.tokensGenerated,
-          },
-          gridlock: {
-            job_id: jobId,
-            ttft_ms: ttftMs,
-            tpot_ms: tpotMs,
-            sla_tier: slaTier,
-            sla_met: slaMet,
-            sla_target_ttft_ms: targetTtft,
-            worker: registryWorker.address,
-            decode_worker: decodeWorker?.address ?? null,
-            confidential,
-            penalty_due_lock: penalty,
-            fee_lock: fee,
-            cache_warm: warm !== null,
-            attestation_hash: confidential ? `attest_${jobId.slice(0, 16)}` : null,
-          },
-        });
-      } catch (err) {
-        console.log(`[chat] WS dispatch failed: ${err instanceof Error ? err.message : err}`);
-      }
+          attestation_hash: attestation.hash,
+        },
+      });
+    } catch (err) {
+      console.log(`[chat] WS dispatch failed: ${err instanceof Error ? err.message : err}`);
     }
   }
 
-  const worker = pickPrefillWorker(slaTier, confidential, warm);
-  if (!worker) return c.json({ error: "No eligible workers for this SLA tier" }, 503);
   const decodeWorker = pickDecodeWorker(slaTier, confidential);
   const vllmPayload = buildVllmPayload(req);
 
@@ -212,7 +241,17 @@ chatRoutes.post("/v1/chat/completions", async (c) => {
       }
 
       const ttftMs = firstTs !== null ? Math.floor(firstTs - acceptTs) : 0;
-      const slaMet = ttftMs <= targetTtft;
+      const responseText = "streamed";
+      const { attestation, slaMet } = finalizeAttestation({
+        confidential,
+        worker,
+        jobId,
+        response: responseText,
+        ttftMs,
+        tpotMs: 0,
+        targetTtft,
+        targetTpot,
+      });
       const rec = createJobRecord({
         id: jobId,
         customer,
@@ -229,11 +268,11 @@ chatRoutes.post("/v1/chat/completions", async (c) => {
         penalty_paid: slaMet ? null : Math.round(fee * PENALTY_MULT[slaTier]! * 10000) / 10000,
         fee,
         cache_warm: warm !== null,
-        attestation_hash: confidential ? `attest_${jobId.slice(0, 16)}` : null,
+        attestation_hash: attestation.hash,
       });
       appendJob(rec);
       await cacheSetTtl(prefixKey, worker.address);
-      void settleJob(jobId, slaTier, ttftMs, 0, slaMet, confidential, worker, fee);
+      void settleJob(jobId, slaTier, ttftMs, 0, slaMet, confidential, worker, fee, attestation.hash);
       watcherSample(jobId, ttftMs);
     });
   }
@@ -292,7 +331,17 @@ chatRoutes.post("/v1/chat/completions", async (c) => {
     tpotMs = Math.floor(((performance.now() - firstTokenTs) / Math.max(tokens.length, 1)) * 1000);
   }
 
-  const slaMet = ttftMs <= targetTtft && tpotMs <= targetTpot;
+  const responseText = tokens.join("") || "(no response)";
+  const { attestation, slaMet } = finalizeAttestation({
+    confidential,
+    worker,
+    jobId,
+    response: responseText,
+    ttftMs,
+    tpotMs,
+    targetTtft,
+    targetTpot,
+  });
   const penalty = slaMet ? null : fee * PENALTY_MULT[slaTier]!;
 
   await cacheSetTtl(prefixKey, worker.address);
@@ -313,11 +362,11 @@ chatRoutes.post("/v1/chat/completions", async (c) => {
     penalty_paid: penalty,
     fee,
     cache_warm: warm !== null,
-    attestation_hash: confidential ? `attest_${jobId.slice(0, 16)}` : null,
+    attestation_hash: attestation.hash,
   });
   appendJob(jobRecord);
 
-  void settleJob(jobId, slaTier, ttftMs, tpotMs, slaMet, confidential, worker, fee);
+  void settleJob(jobId, slaTier, ttftMs, tpotMs, slaMet, confidential, worker, fee, attestation.hash);
   watcherSample(jobId, ttftMs);
 
   return c.json({
@@ -327,7 +376,7 @@ chatRoutes.post("/v1/chat/completions", async (c) => {
     choices: [
       {
         index: 0,
-        message: { role: "assistant", content: tokens.join("") || "(no response)" },
+        message: { role: "assistant", content: responseText },
         finish_reason: "stop",
       },
     ],
@@ -349,7 +398,7 @@ chatRoutes.post("/v1/chat/completions", async (c) => {
       penalty_due_lock: penalty,
       fee_lock: fee,
       cache_warm: warm !== null,
-      attestation_hash: confidential ? `attest_${jobId.slice(0, 16)}` : null,
+      attestation_hash: attestation.hash,
     },
   });
 });

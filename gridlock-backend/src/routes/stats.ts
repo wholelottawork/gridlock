@@ -3,7 +3,9 @@ import { getCacheStats, getRedis, redisStatus } from "../cache.js";
 import { config, PROGRAM_IDS } from "../config.js";
 import { supabaseConfigured } from "../db.js";
 import { getRecentSlots } from "../solana.js";
-import { inflightCount, jobsStore, totalLockBurned, workersRegistry } from "../state.js";
+import { workersRegistry } from "../state.js";
+import { getTeeCapacity } from "../tee-capacity.js";
+import { inflightCount, jobsStore, totalLockBurned } from "../state.js";
 
 export const statsRoutes = new Hono();
 
@@ -160,6 +162,10 @@ statsRoutes.get("/v1/models", (c) => {
     },
   ];
   return c.json({ models, total: models.length });
+});
+
+statsRoutes.get("/v1/capacity/tee", (c) => {
+  return c.json(getTeeCapacity(workersRegistry));
 });
 
 statsRoutes.get("/v1/stats/cache", async (c) => {

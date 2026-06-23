@@ -22,6 +22,7 @@ export interface DispatchJobPayload {
   slaTier: string;
   maxTokens: number;
   customer: string;
+  confidential?: boolean;
 }
 
 interface PendingJob {
@@ -37,6 +38,7 @@ export interface JobResult {
   tokensGenerated: number;
   ttftMs: number;
   tpotMs: number;
+  attestationHash?: string | null;
 }
 
 /** Jobs waiting for a worker (REST poll or WS push). */
@@ -163,8 +165,9 @@ class WorkerHub {
     const tokensGenerated = Number(msg.tokens_generated ?? msg.output_tokens ?? 0);
     const ttftMs = Number(msg.ttft_ms ?? 0);
     const tpotMs = Number(msg.tpot_ms ?? 0);
+    const attestationHash = typeof msg.attestation_hash === "string" ? msg.attestation_hash : null;
 
-    pending.resolve({ content, tokensGenerated, ttftMs, tpotMs });
+    pending.resolve({ content, tokensGenerated, ttftMs, tpotMs, attestationHash });
     this.tryDispatchAllIdle();
     this.broadcastStats();
   }
@@ -239,6 +242,7 @@ class WorkerHub {
       messages: payload.messages,
       sla_tier: payload.slaTier,
       max_tokens: payload.maxTokens,
+      confidential: payload.confidential ?? false,
     });
   }
 
@@ -250,14 +254,18 @@ class WorkerHub {
       return direct.payload;
     }
 
-    const open = this.queue.find((q) => !q.assignedAddress);
-    if (!open) return null;
-
     const worker = workersRegistry.find((w) => w.address === workerAddress);
     if (!worker || worker.status !== "Active") return null;
-    if (!worker.sla_tiers.includes(open.payload.slaTier)) return null;
 
-    this.queue.splice(this.queue.indexOf(open), 1);
+    const openIdx = this.queue.findIndex((q) => {
+      if (q.assignedAddress) return false;
+      if (!worker.sla_tiers.includes(q.payload.slaTier)) return false;
+      if (q.payload.confidential && !worker.tee_capable) return false;
+      return true;
+    });
+    if (openIdx < 0) return null;
+
+    const open = this.queue.splice(openIdx, 1)[0]!;
     open.assignedAddress = workerAddress;
 
     const session = this.sessions.get(workerAddress);
@@ -273,7 +281,13 @@ class WorkerHub {
   completeFromRest(
     jobId: string,
     workerAddress: string,
-    body: { ttft_ms: number; tpot_ms: number; output_tokens: number; response?: string },
+    body: {
+      ttft_ms: number;
+      tpot_ms: number;
+      output_tokens: number;
+      response?: string;
+      attestation_hash?: string | null;
+    },
   ): boolean {
     const pending = this.pending.get(jobId);
     if (!pending) return false;
@@ -286,28 +300,59 @@ class WorkerHub {
       tokens_generated: body.output_tokens,
       ttft_ms: body.ttft_ms,
       tpot_ms: body.tpot_ms,
+      attestation_hash: body.attestation_hash ?? null,
     });
     return true;
   }
 
-  pickIdleWorker(slaTier: string): WsWorkerSession | null {
+  pickIdleWorker(slaTier: string, confidential = false): WsWorkerSession | null {
     const candidates = [...this.sessions.values()].filter((s) => {
       if (s.status !== "idle") return false;
       const w = workersRegistry.find((r) => r.address === s.address);
-      return w && w.status === "Active" && w.sla_tiers.includes(slaTier);
+      return (
+        w
+        && w.status === "Active"
+        && w.sla_tiers.includes(slaTier)
+        && (!confidential || w.tee_capable)
+      );
     });
     if (!candidates.length) return null;
     return candidates.sort((a, b) => b.tokPerSec - a.tokPerSec)[0]!;
   }
 
-  hasWsWorker(slaTier: string): boolean {
-    return this.pickIdleWorker(slaTier) !== null || this.queue.length > 0;
+  getIdleSession(address: string): WsWorkerSession | null {
+    const session = this.sessions.get(address);
+    if (!session || session.status !== "idle") return null;
+    const worker = workersRegistry.find((w) => w.address === address);
+    if (!worker || worker.status !== "Active") return null;
+    return session;
   }
 
-  hasConnectedWorkers(slaTier: string): boolean {
+  isConnected(address: string): boolean {
+    return this.sessions.has(address);
+  }
+
+  dispatchToWorker(address: string, payload: DispatchJobPayload): Promise<JobResult> {
+    const session = this.getIdleSession(address);
+    if (!session) {
+      return Promise.reject(new Error(`Worker ${address.slice(0, 8)} not connected`));
+    }
+    return this.assignToWorker(session, payload);
+  }
+
+  hasWsWorker(slaTier: string, confidential = false): boolean {
+    return this.pickIdleWorker(slaTier, confidential) !== null || this.queue.length > 0;
+  }
+
+  hasConnectedWorkers(slaTier: string, confidential = false): boolean {
     return [...this.sessions.values()].some((s) => {
       const w = workersRegistry.find((r) => r.address === s.address);
-      return w && w.status === "Active" && w.sla_tiers.includes(slaTier);
+      return (
+        w
+        && w.status === "Active"
+        && w.sla_tiers.includes(slaTier)
+        && (!confidential || w.tee_capable)
+      );
     });
   }
 
@@ -341,9 +386,15 @@ class WorkerHub {
 
   private tryDispatchIdle(session: WsWorkerSession) {
     if (session.status !== "idle") return;
-    const idx = this.queue.findIndex(
-      (q) => !q.assignedAddress || q.assignedAddress === session.address,
-    );
+    const worker = workersRegistry.find((w) => w.address === session.address);
+    if (!worker || worker.status !== "Active") return;
+
+    const idx = this.queue.findIndex((q) => {
+      if (q.assignedAddress && q.assignedAddress !== session.address) return false;
+      if (!worker.sla_tiers.includes(q.payload.slaTier)) return false;
+      if (q.payload.confidential && !worker.tee_capable) return false;
+      return true;
+    });
     if (idx < 0) return;
 
     const item = this.queue.splice(idx, 1)[0]!;

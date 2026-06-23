@@ -29,6 +29,11 @@ export const VLLM_SERVE_COMMAND =
 
 export const OLLAMA_PULL_COMMAND = "ollama pull llama3.1:8b";
 
+/** Enable dev TEE attestation (H100 CC required for production). Windows PowerShell prefix. */
+export function nativeWorkerTeeCommand(wallet: string): string {
+  return `$env:GRIDLOCK_TEE_CAPABLE="true"; ${nativeWorkerLocalCommand(wallet)}`;
+}
+
 function downloadUrl(filename: string): string {
   const override = process.env.NEXT_PUBLIC_WORKER_DOWNLOAD_BASE;
   if (override) return `${override.replace(/\/$/, "")}/${filename}`;

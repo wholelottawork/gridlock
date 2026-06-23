@@ -111,7 +111,10 @@ export async function chatCompletion(opts: {
       gridlock: { sla: opts.sla ?? "standard", privacy: opts.privacy ?? false },
     }),
   });
-  if (!res.ok) throw new Error(`Chat API: ${res.status}`);
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
+    throw new Error(err.error ?? `Chat API: ${res.status}`);
+  }
   const data = await res.json();
   return {
     content: data.choices[0].message.content as string,
@@ -123,6 +126,17 @@ export async function chatCompletion(opts: {
 
 export async function fetchNetworkStats(): Promise<ApiNetworkStats> {
   return get<ApiNetworkStats>("/v1/network/stats");
+}
+
+export interface ApiTeeCapacity {
+  tee_workers_registered: number;
+  tee_workers_online: number;
+  can_serve_confidential: boolean;
+  online_addresses: string[];
+}
+
+export async function fetchTeeCapacity(): Promise<ApiTeeCapacity> {
+  return get<ApiTeeCapacity>("/v1/capacity/tee");
 }
 
 // ─── Jobs ─────────────────────────────────────────────────────────────────────
@@ -186,6 +200,22 @@ export async function setWorkerStatus(
   status: WorkerRuntimeStatus,
 ): Promise<{ ok: boolean; status: string; in_flight?: number }> {
   return post(`/v1/workers/${address}/status`, { status });
+}
+
+export async function setWorkerConfidentialMode(
+  address: string,
+  enabled: boolean,
+): Promise<{ ok: boolean; is_confidential: boolean }> {
+  const res = await fetch(`${BASE_URL}/v1/workers/${address}/confidential`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ enabled }),
+  });
+  if (!res.ok) {
+    const err = (await res.json().catch(() => ({}))) as { error?: string };
+    throw new Error(err.error ?? `API confidential: ${res.status}`);
+  }
+  return res.json() as Promise<{ ok: boolean; is_confidential: boolean }>;
 }
 
 /** Register a new worker, or send heartbeat if this pubkey is already registered. */

@@ -8,8 +8,10 @@ import {
   chatCompletion,
   fetchNetworkStats,
   fetchJobs,
+  fetchTeeCapacity,
   type ApiJob,
   type ApiNetworkStats,
+  type ApiTeeCapacity,
   type ChatGridlockMeta,
 } from "@/lib/api-client";
 import {
@@ -93,7 +95,15 @@ export default function ConsolePage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [playMessages, playLoading]);
 
+  useEffect(() => {
+    if (playSla === "confidential") setPlayPrivacy(true);
+  }, [playSla]);
+
   async function sendPrompt() {
+    if (playPrivacy && teeCapacity && !teeCapacity.can_serve_confidential) {
+      setPlayError("No TEE workers online — start a worker with GRIDLOCK_TEE_CAPABLE=true or disable privacy.");
+      return;
+    }
     const prompt = playInput.trim();
     if (!prompt || playLoading) return;
     setPlayInput("");
@@ -130,6 +140,7 @@ export default function ConsolePage() {
 
   // ── Overview / real stats ─────────────────────────────────────────────────
   const [realStats, setRealStats] = useState<ApiNetworkStats | null>(null);
+  const [teeCapacity, setTeeCapacity] = useState<ApiTeeCapacity | null>(null);
   const [selectedTier, setSelectedTier] = useState<SlaTier>("realtime");
   const [privacyDefault, setPrivacyDefault] = useState(false);
   const [latencyHistory, setLatencyHistory] = useState<{ t: number; p99: number; p50: number }[]>([]);
@@ -138,7 +149,10 @@ export default function ConsolePage() {
     setLatencyHistory(
       Array.from({ length: 20 }, (_, i) => ({ t: i, p99: Math.floor(Math.random() * 200 + 120), p50: Math.floor(Math.random() * 100 + 80) }))
     );
-    const load = () => fetchNetworkStats().then(setRealStats).catch(() => {});
+    const load = () => {
+      fetchNetworkStats().then(setRealStats).catch(() => {});
+      fetchTeeCapacity().then(setTeeCapacity).catch(() => {});
+    };
     load();
     const id = setInterval(() => {
       load();
@@ -240,14 +254,34 @@ export default function ConsolePage() {
               </div>
             </div>
 
-            <div style={{ flexShrink: 0 }}>
+            <div style={{ flexShrink: 0, width: 226 }}>
               <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 7 }}>TEE / PRIVACY</div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ position: "relative", display: "flex", alignItems: "center", gap: 8, paddingRight: 150, minHeight: 22 }}>
                 <div className={`toggle${playPrivacy ? " on" : ""}`} onClick={() => setPlayPrivacy((p) => !p)}>
                   <div className="toggle-thumb" />
                 </div>
                 <span style={{ fontSize: 12, color: playPrivacy ? "var(--orange)" : "var(--text-muted)", fontWeight: 600 }}>
                   {playPrivacy ? "On" : "Off"}
+                </span>
+                <span style={{
+                  position: "absolute",
+                  right: 0,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  width: 142,
+                  fontSize: 11,
+                  fontWeight: 600,
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  visibility: playPrivacy ? "visible" : "hidden",
+                  color: teeCapacity?.can_serve_confidential ? "var(--green)" : "var(--red)",
+                }}>
+                  {teeCapacity
+                    ? teeCapacity.can_serve_confidential
+                      ? `${teeCapacity.tee_workers_online} TEE worker(s) online`
+                      : "No TEE workers online"
+                    : "Checking TEE capacity…"}
                 </span>
               </div>
             </div>
@@ -336,6 +370,16 @@ export default function ConsolePage() {
                           +{msg.meta.penalty_due_lock.toFixed(4)} $LOCK credited
                         </span>
                       ) : null}
+                      {msg.meta.confidential && msg.meta.attestation_hash && (
+                        <span style={{ fontSize: 11, color: "var(--purple)", fontFamily: "monospace", fontWeight: 600 }}>
+                          attestation {msg.meta.attestation_hash.slice(0, 8)}…
+                        </span>
+                      )}
+                      {msg.meta.confidential && !msg.meta.attestation_hash && (
+                        <span style={{ fontSize: 11, color: "var(--red)", fontWeight: 600 }}>
+                          attestation missing
+                        </span>
+                      )}
                       <span style={{ fontSize: 11, color: "var(--text-muted)", fontFamily: "monospace" }}>
                         worker {msg.meta.worker.slice(0, 8)}…
                       </span>

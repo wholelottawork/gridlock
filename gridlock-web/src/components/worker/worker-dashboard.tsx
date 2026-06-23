@@ -9,6 +9,7 @@ import {
   fetchLeaderboard,
   subscribeLive,
   setWorkerStatus,
+  setWorkerConfidentialMode,
   type ApiWorker,
   type ApiJob,
 } from "@/lib/api-client";
@@ -265,15 +266,27 @@ export function WorkerDashboard() {
               <div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: confidential ? "var(--purple)" : "var(--text-secondary)", marginBottom: 2 }}>Confidential Mode</div>
                 <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700 }}>TEE-only jobs · premium pay</div>
+                {!hasData && (
+                  <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 4 }}>Register worker first</div>
+                )}
+                {hasData && !workerData.tee_capable && (
+                  <div style={{ fontSize: 10, color: "var(--orange)", marginTop: 4 }}>Re-register with TEE enabled to accept privacy jobs</div>
+                )}
               </div>
               <div
                 className={`toggle${confidential ? " on" : ""}`}
                 style={{
                   background: confidential ? "var(--purple)" : undefined,
                   borderColor: confidential ? "var(--purple)" : undefined,
-                  pointerEvents: hasData ? "auto" : "none",
+                  pointerEvents: hasData && workerData.tee_capable ? "auto" : "none",
+                  opacity: hasData && workerData.tee_capable ? 1 : 0.5,
                 }}
-                onClick={() => hasData && setConfidential((c) => !c)}
+                onClick={() => {
+                  if (!hasData || !workerData.tee_capable || !publicKey) return;
+                  void setWorkerConfidentialMode(publicKey.toBase58(), !confidential)
+                    .then((r) => setConfidential(r.is_confidential))
+                    .catch((e) => console.error("Confidential mode toggle failed:", e));
+                }}
               >
                 <div className="toggle-thumb" />
               </div>

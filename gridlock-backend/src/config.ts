@@ -36,7 +36,7 @@ export const config = {
   ),
 };
 
-export const OPEN_PATHS = new Set(["/health", "/v1/live", "/v1/ws"]);
+export const OPEN_PATHS = new Set(["/health", "/v1/live", "/v1/ws", "/v1/capacity/tee", "/v1/network/stats"]);
 
 export const PROGRAM_IDS = {
   providerRegistry: "GvCMygAV4RNYVgPybMmgEb36AkSKEBQJJw45WfUfSfmu",
