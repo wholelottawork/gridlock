@@ -79,6 +79,17 @@ const api = {
     load: (): Promise<WorkerSettings> => ipcRenderer.invoke('settings:load'),
     save: (cfg: WorkerSettings): Promise<{ ok: boolean }> => ipcRenderer.invoke('settings:save', cfg)
   },
+  setup: {
+    check: () => ipcRenderer.invoke('setup:check'),
+    installOllama: () => ipcRenderer.invoke('setup:installOllama'),
+    pullModel: () => ipcRenderer.invoke('setup:pullModel'),
+    openOllamaDownload: () => ipcRenderer.invoke('setup:openOllamaDownload'),
+    onProgress: (cb: (data: { phase: string; line: string; model?: string }) => void) => {
+      const handler = (_e: unknown, data: { phase: string; line: string; model?: string }) => cb(data)
+      ipcRenderer.on('setup:progress', handler)
+      return () => ipcRenderer.removeListener('setup:progress', handler)
+    },
+  },
   window: {
     minimize: () => ipcRenderer.invoke('window:minimize'),
     maximize: () => ipcRenderer.invoke('window:maximize'),

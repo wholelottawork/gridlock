@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { AreaChart, Area, Tooltip, ResponsiveContainer } from 'recharts'
+import SetupPanel from '../components/SetupPanel'
 
 type GPU = {
   vendor?: string
@@ -150,6 +151,7 @@ export default function Dashboard() {
   const [walletSaving, setWalletSaving] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
   const [toggleBusy, setToggleBusy] = useState<'starting' | 'stopping' | null>(null)
+  const [setupReady, setSetupReady] = useState(true)
   const [gpuDetected, setGpuDetected] = useState(false)
   const [effectiveCompute, setEffectiveCompute] = useState<'cpu' | 'gpu'>('gpu')
   const [cpu, setCpu] = useState<CPU>(EMPTY_CPU)
@@ -173,6 +175,20 @@ export default function Dashboard() {
         setWalletInput(cfg.wallet)
       }
     }).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    const check = (window as unknown as { gridlock?: { setup?: { check: () => Promise<{ ready: boolean }> } } }).gridlock?.setup?.check
+    if (!check) return
+    const pollSetup = async () => {
+      try {
+        const s = await check()
+        setSetupReady(s.ready)
+      } catch { /* ignore */ }
+    }
+    void pollSetup()
+    const iv = setInterval(pollSetup, 5000)
+    return () => clearInterval(iv)
   }, [])
 
   useEffect(() => {
@@ -276,7 +292,7 @@ export default function Dashboard() {
 
   const usingCpu = effectiveCompute === 'cpu' || gpu.vendor === 'cpu'
   const computeReady = usingCpu ? Boolean(cpu.detected) : gpuDetected
-  const canStartWorker = walletConnected && computeReady
+  const canStartWorker = walletConnected && computeReady && setupReady
 
   const vramPct = gpu.vram_total_gb > 0 ? (gpu.vram_used_gb / gpu.vram_total_gb) * 100 : 0
   const isBusy = toggleBusy !== null
@@ -300,6 +316,8 @@ export default function Dashboard() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.22 }}>
+
+      <SetupPanel />
 
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>

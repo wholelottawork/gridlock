@@ -2,6 +2,8 @@ import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, shell } from 'ele
 import { join } from 'path'
 import { spawn, ChildProcess } from 'child_process'
 import { loadSettings, saveSettings, GRIDLOCK_API_URL, type WorkerSettings } from './settings.js'
+import { getDaemonScriptPath, getPythonExecutable, packagedDaemonEnv } from './python.js'
+import { registerSetupHandlers } from './setup.js'
 
 const isDev = !app.isPackaged
 let mainWindow: BrowserWindow | null = null
@@ -62,11 +64,8 @@ function stopDaemon(): void {
 function startDaemon(settings = loadSettings()): void {
   stopDaemon()
 
-  const pythonScript = isDev
-    ? join(process.cwd(), 'python', 'daemon.py')
-    : join(process.resourcesPath, 'python', 'daemon.py')
-
-  const pythonBin = process.platform === 'win32' ? 'python' : 'python3'
+  const pythonScript = getDaemonScriptPath()
+  const pythonBin = getPythonExecutable()
   const args = [
     pythonScript,
     '--port', String(DAEMON_PORT),
@@ -84,14 +83,13 @@ function startDaemon(settings = loadSettings()): void {
   try {
     daemon = spawn(pythonBin, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
+      env: packagedDaemonEnv({
         GRIDLOCK_BACKEND_URL: GRIDLOCK_API_URL,
         GRIDLOCK_WALLET: settings.wallet,
         GRIDLOCK_TEE: settings.teeMode ? 'true' : 'false',
         GRIDLOCK_COMPUTE_DEVICE: settings.computeDevice,
         GRIDLOCK_GPU_INDEX: String(settings.gpuIndex ?? 0),
-      },
+      }),
     })
 
     daemon.stdout?.on('data', (buf: Buffer) => {
@@ -182,6 +180,8 @@ ipcMain.handle('settings:save', async (_e, cfg: WorkerSettings) => {
 ipcMain.handle('window:minimize', () => mainWindow?.minimize())
 ipcMain.handle('window:maximize', () => mainWindow?.isMaximized() ? mainWindow.restore() : mainWindow?.maximize())
 ipcMain.handle('window:close',    () => mainWindow?.hide())
+
+registerSetupHandlers(() => mainWindow)
 
 app.whenReady().then(() => {
   createWindow()

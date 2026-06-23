@@ -2,5 +2,8 @@ node_modules/
 out/
 release/
 dist/
+python-runtime/
 *.log
 .env
+python/.venv/
+python/**/__pycache__/

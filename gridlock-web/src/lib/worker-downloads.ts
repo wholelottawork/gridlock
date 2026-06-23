@@ -40,21 +40,25 @@ function downloadUrl(filename: string): string {
   return `https://github.com/${REPO}/releases/download/${TAG}/${filename}`;
 }
 
+const WIN_INSTALLER = `Gridlock-Worker-Setup-${WORKER_APP_VERSION}.exe`;
+const MAC_INSTALLER = `Gridlock-Worker-${WORKER_APP_VERSION}.dmg`;
+const LINUX_INSTALLER = `Gridlock-Worker-${WORKER_APP_VERSION}.AppImage`;
+
 export const DESKTOP_WORKER_DOWNLOADS = {
   windows: {
     label: "Windows",
-    filename: "Gridlock-Worker-Setup.exe",
-    url: downloadUrl("Gridlock-Worker-Setup.exe"),
+    filename: WIN_INSTALLER,
+    url: downloadUrl(WIN_INSTALLER),
   },
   mac: {
     label: "macOS",
-    filename: "Gridlock-Worker.dmg",
-    url: downloadUrl("Gridlock-Worker.dmg"),
+    filename: MAC_INSTALLER,
+    url: downloadUrl(MAC_INSTALLER),
   },
   linux: {
     label: "Linux",
-    filename: "Gridlock-Worker.AppImage",
-    url: downloadUrl("Gridlock-Worker.AppImage"),
+    filename: LINUX_INSTALLER,
+    url: downloadUrl(LINUX_INSTALLER),
   },
 } as const;
 

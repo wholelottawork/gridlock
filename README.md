@@ -106,21 +106,23 @@ App runs at [http://localhost:3000](http://localhost:3000).
 
 ### Desktop worker (Electron)
 
+**Windows installer:** download-and-go — bundled Python, in-app Ollama setup, one-click model download. See [`gridlock-worker/RELEASE.md`](gridlock-worker/RELEASE.md).
+
 ```bash
 cd gridlock-worker
-pip install -r python/requirements.txt
+pip install -r python/requirements.txt   # dev only — not needed for packaged .exe
 npm install
 npm run dev
 ```
 
-1. Enter your **Solana public address** (no private key — see Wallet model below).
+1. Enter your **Solana public address** (no private key).
 2. In **Settings**, choose compute device: **Auto**, **CPU**, or **GPU**.
-3. Install **Ollama** and pull a model: `ollama pull llama3.1:8b`
+3. Complete **Setup** (Ollama + model) — packaged app guides you; dev mode needs local Ollama.
 4. Click **Start Worker**.
 
-The app connects to **`https://api.reacton.dev`** by default (override with `GRIDLOCK_BACKEND_URL` for local dev).
+Production API: **`https://api.reacton.dev`** (override with `GRIDLOCK_BACKEND_URL` for local dev).
 
-Package installers: `npm run package`
+Package: `npm run package` on Windows → `release/Gridlock-Worker-Setup-0.1.0.exe` (version from `package.json`)
 
 ### Native worker (CLI)
 

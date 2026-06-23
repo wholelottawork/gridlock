@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
+    "bundle-python": "node scripts/bundle-python.cjs",
+    "prepackage": "node scripts/bundle-python.cjs",
     "package": "npm run build && electron-builder",
     "preview": "electron-vite preview"
   },
@@ -17,20 +19,26 @@
     },
     "win": {
       "target": "nsis",
-      "artifactName": "Gridlock-Worker-Setup.${ext}"
+      "artifactName": "Gridlock-Worker-Setup-${version}.${ext}"
     },
     "mac": {
       "target": "dmg",
-      "artifactName": "Gridlock-Worker.${ext}"
+      "artifactName": "Gridlock-Worker-${version}.${ext}"
     },
     "linux": {
       "target": "AppImage",
-      "artifactName": "Gridlock-Worker.${ext}"
+      "artifactName": "Gridlock-Worker-${version}.${ext}"
     },
     "extraResources": [
       {
         "from": "python",
-        "to": "python"
+        "to": "python",
+        "filter": ["**/*", "!**/__pycache__/**", "!**/.venv/**"]
+      },
+      {
+        "from": "python-runtime",
+        "to": "python-runtime",
+        "filter": ["**/*"]
       }
     ],
     "files": [
