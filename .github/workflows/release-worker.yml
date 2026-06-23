@@ -47,11 +47,20 @@ jobs:
         run: pip install pillow
 
       - name: Build installer
-        run: npm run package
+        shell: pwsh
         env:
-          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_LINK_B64: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: |
+          # Sign only when CSC_LINK secret is configured (base64-encoded .pfx).
+          # Otherwise build unsigned — do not set CSC_IDENTITY_AUTO_DISCOVERY=false
+          # without a cert, or electron-builder fails.
+          if ($env:CSC_LINK_B64) {
+            $pfx = Join-Path $env:RUNNER_TEMP "codesign.pfx"
+            [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:CSC_LINK_B64))
+            $env:CSC_LINK = $pfx
+          }
+          npm run package
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

@@ -9,7 +9,7 @@
     "bundle-python": "node scripts/bundle-python.cjs",
     "generate-icons": "python3 scripts/generate-icons.py",
     "prepackage": "python3 scripts/generate-icons.py && node scripts/bundle-python.cjs",
-    "package": "npm run build && electron-builder",
+    "package": "npm run build && electron-builder --publish never",
     "preview": "electron-vite preview"
   },
   "build": {
