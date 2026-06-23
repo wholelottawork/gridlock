@@ -78,6 +78,8 @@ function startDaemon(settings = loadSettings()): void {
   if (settings.teeMode) {
     args.push('--tee')
   }
+  args.push('--compute', settings.computeDevice)
+  args.push('--gpu-index', String(settings.gpuIndex ?? 0))
 
   try {
     daemon = spawn(pythonBin, args, {
@@ -87,6 +89,8 @@ function startDaemon(settings = loadSettings()): void {
         GRIDLOCK_BACKEND_URL: GRIDLOCK_API_URL,
         GRIDLOCK_WALLET: settings.wallet,
         GRIDLOCK_TEE: settings.teeMode ? 'true' : 'false',
+        GRIDLOCK_COMPUTE_DEVICE: settings.computeDevice,
+        GRIDLOCK_GPU_INDEX: String(settings.gpuIndex ?? 0),
       },
     })
 
@@ -151,10 +155,27 @@ async function syncWalletToDaemon(wallet: string): Promise<boolean> {
   }
 }
 
+async function syncConfigToDaemon(settings: WorkerSettings): Promise<boolean> {
+  try {
+    const res = await fetch(`http://127.0.0.1:${DAEMON_PORT}/config`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        compute_device: settings.computeDevice,
+        gpu_index: settings.gpuIndex ?? 0,
+      }),
+    })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
 ipcMain.handle('settings:save', async (_e, cfg: WorkerSettings) => {
   saveSettings(cfg)
-  const synced = await syncWalletToDaemon(cfg.wallet)
-  if (!synced) startDaemon(cfg)
+  const syncedWallet = await syncWalletToDaemon(cfg.wallet)
+  const syncedConfig = await syncConfigToDaemon(cfg)
+  if (!syncedWallet || !syncedConfig) startDaemon(cfg)
   return { ok: true }
 })
 

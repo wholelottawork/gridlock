@@ -13,6 +13,25 @@ import { config, PROGRAM_IDS } from "./config.js";
 
 const TOKEN_2022 = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
 
+/** True when `value` is a valid Solana base58 public key. */
+export function isValidSolanaPubkey(value: string): boolean {
+  if (!value || value.length < 32 || value.length > 44) return false;
+  try {
+    new PublicKey(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function tryPublicKey(value: string): PublicKey | null {
+  try {
+    return new PublicKey(value);
+  } catch {
+    return null;
+  }
+}
+
 function anchorDiscriminator(name: string): Buffer {
   return createHash("sha256").update(`global:${name}`).digest().subarray(0, 8);
 }

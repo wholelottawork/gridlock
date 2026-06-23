@@ -97,11 +97,18 @@ chatRoutes.post("/v1/chat/completions", async (c) => {
 
   const tryWsDispatch = !req.stream && workerHub.getIdleSession(worker.address);
 
-  if (tryWsDispatch) {
-    if (config.solanaSettlementEnabled) {
+  async function anchorJobOnChain(): Promise<void> {
+    if (!config.solanaSettlementEnabled) return;
+    try {
       await anchorOpenJob(jobId, slaTier, fee, confidential);
       await anchorAssignWorker(jobId, worker.address);
+    } catch (err) {
+      console.log(`[chat] solana anchor failed: ${err instanceof Error ? err.message : err}`);
     }
+  }
+
+  if (tryWsDispatch) {
+    await anchorJobOnChain();
 
     const acceptTs = performance.now();
     try {
@@ -194,10 +201,7 @@ chatRoutes.post("/v1/chat/completions", async (c) => {
   const decodeWorker = pickDecodeWorker(slaTier, confidential);
   const vllmPayload = buildVllmPayload(req);
 
-  if (config.solanaSettlementEnabled) {
-    await anchorOpenJob(jobId, slaTier, fee, confidential);
-    await anchorAssignWorker(jobId, worker.address);
-  }
+  await anchorJobOnChain();
 
   if (req.stream) {
     return streamSSE(c, async (stream) => {

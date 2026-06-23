@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 
+type ComputeDevice = 'auto' | 'cpu' | 'gpu'
+
 function Field({ label, sub, children }: { label: string; sub?: string; children: React.ReactNode }) {
   return (
     <div style={{ marginBottom: 20 }}>
@@ -35,10 +37,17 @@ export default function Settings() {
   const [autoStart, setAutoStart] = useState(false)
   const [maxVram, setMaxVram] = useState('90')
   const [tier, setTier] = useState('Batch')
+  const [computeDevice, setComputeDevice] = useState<ComputeDevice>('auto')
+  const [gpuIndex, setGpuIndex] = useState(0)
+  const [detectedGpus, setDetectedGpus] = useState<{ index: number; name: string; vendor?: string }[]>([])
+  const [cpuName, setCpuName] = useState('')
   const [saved, setSaved] = useState(false)
 
   useEffect(() => {
-    const gl = (window as unknown as { gridlock?: { settings: { load: () => Promise<Record<string, unknown>> } } }).gridlock
+    const gl = (window as unknown as { gridlock?: {
+      settings: { load: () => Promise<Record<string, unknown>> }
+      daemon: { status: () => Promise<{ gpus?: { index?: number; name: string; vendor?: string }[]; cpu?: { name?: string } }> }
+    } }).gridlock
     gl?.settings.load().then((cfg) => {
       if (typeof cfg.wallet === 'string') setWallet(cfg.wallet)
       if (typeof cfg.rpcUrl === 'string') setRpcUrl(cfg.rpcUrl)
@@ -46,12 +55,22 @@ export default function Settings() {
       if (typeof cfg.autoStart === 'boolean') setAutoStart(cfg.autoStart)
       if (typeof cfg.maxVramPct === 'number') setMaxVram(String(cfg.maxVramPct))
       if (typeof cfg.tier === 'string') setTier(cfg.tier)
+      if (cfg.computeDevice === 'auto' || cfg.computeDevice === 'cpu' || cfg.computeDevice === 'gpu') {
+        setComputeDevice(cfg.computeDevice)
+      }
+      if (typeof cfg.gpuIndex === 'number') setGpuIndex(cfg.gpuIndex)
+    }).catch(() => {})
+    gl?.daemon.status().then((s) => {
+      if (s.gpus?.length) {
+        setDetectedGpus(s.gpus.map(g => ({ index: g.index ?? 0, name: g.name, vendor: g.vendor })))
+      }
+      if (s.cpu?.name) setCpuName(s.cpu.name)
     }).catch(() => {})
   }, [])
 
   const save = async () => {
     const gl = (window as unknown as { gridlock?: { settings: { save: (cfg: unknown) => Promise<{ ok: boolean }> } } }).gridlock
-    const cfg = { wallet, rpcUrl, teeMode, autoStart, maxVramPct: Number(maxVram), tier }
+    const cfg = { wallet, rpcUrl, teeMode, autoStart, maxVramPct: Number(maxVram), tier, computeDevice, gpuIndex }
     try { await gl?.settings.save(cfg) } catch {}
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
@@ -75,6 +94,50 @@ export default function Settings() {
       {/* Worker */}
       <div className="card" style={{ marginBottom: 12 }}>
         <div style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '1.2px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 14 }}>WORKER</div>
+
+        <Field label="Compute Device" sub="Choose whether Ollama runs on CPU or GPU. Auto uses a GPU when NVIDIA/AMD is detected, otherwise CPU.">
+          <div style={{ display: 'flex', gap: 6, marginBottom: detectedGpus.length > 1 && computeDevice !== 'cpu' ? 10 : 0 }}>
+            {(['auto', 'cpu', 'gpu'] as ComputeDevice[]).map(d => (
+              <button key={d} onClick={() => setComputeDevice(d)} style={{
+                padding: '6px 14px', borderRadius: 5, fontSize: 12, fontWeight: 700,
+                border: `1px solid ${computeDevice === d ? 'var(--text-primary)' : 'var(--border-2)'}`,
+                background: computeDevice === d ? 'var(--text-primary)' : 'var(--accent-dim)',
+                color: computeDevice === d ? '#000000' : 'var(--text-secondary)',
+                cursor: 'pointer', transition: 'all 0.12s', textTransform: 'uppercase',
+              }}>{d}</button>
+            ))}
+          </div>
+          {cpuName && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, marginBottom: 8 }}>
+              CPU: {cpuName}
+            </div>
+          )}
+          {detectedGpus.length === 0 && computeDevice === 'gpu' && (
+            <div style={{ fontSize: 11, color: 'var(--orange)', fontWeight: 600, lineHeight: 1.5 }}>
+              No GPU detected yet. Install NVIDIA or AMD drivers, or switch to CPU / Auto.
+            </div>
+          )}
+          {detectedGpus.length > 0 && computeDevice !== 'cpu' && (
+            <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 700, marginBottom: 8 }}>
+              {detectedGpus.map(g => (
+                <div key={g.index}>{g.vendor?.toUpperCase() ?? 'GPU'} · {g.name}</div>
+              ))}
+            </div>
+          )}
+          {detectedGpus.length > 1 && computeDevice !== 'cpu' && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {detectedGpus.map(g => (
+                <button key={g.index} onClick={() => setGpuIndex(g.index)} style={{
+                  padding: '5px 10px', borderRadius: 5, fontSize: 11, fontWeight: 700,
+                  border: `1px solid ${gpuIndex === g.index ? 'var(--text-primary)' : 'var(--border-2)'}`,
+                  background: gpuIndex === g.index ? 'var(--text-primary)' : 'var(--accent-dim)',
+                  color: gpuIndex === g.index ? '#000000' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                }}>GPU {g.index}</button>
+              ))}
+            </div>
+          )}
+        </Field>
 
         <Field label="Job Tier" sub="Minimum job tier to accept. Higher tiers pay more but require faster hardware.">
           <div style={{ display: 'flex', gap: 6 }}>

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
 Gridlock Worker Daemon
-- Detects local GPU via nvidia-smi
+- Detects CPU and GPUs (NVIDIA, AMD)
 - Registers with the Gridlock backend (BACKEND_URL)
-- Sends heartbeats every 30 s
-- Polls for jobs and runs inference via Ollama/vLLM
+- Sends heartbeats while running
+- Polls for jobs and runs inference via Ollama/vLLM (CPU or GPU)
 - Exposes a local HTTP API on :7420 for the Electron UI
 """
 
@@ -22,14 +22,16 @@ from urllib.parse import quote
 
 from job_messages import prepare_inference_messages
 import inference
-import gpu_detect
+import hardware_detect
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-BACKEND_URL  = os.getenv("GRIDLOCK_BACKEND_URL", "https://api.reacton.dev")
-WALLET_ADDR  = os.getenv("GRIDLOCK_WALLET", "")
+BACKEND_URL   = os.getenv("GRIDLOCK_BACKEND_URL", "https://api.reacton.dev")
+WALLET_ADDR   = os.getenv("GRIDLOCK_WALLET", "")
 ROLE          = os.getenv("GRIDLOCK_ROLE", "Prefill")
 TEE_CAPABLE   = os.getenv("GRIDLOCK_TEE", "false").lower() == "true"
+COMPUTE_MODE  = hardware_detect.normalize_compute_mode(os.getenv("GRIDLOCK_COMPUTE_DEVICE", "auto"))
+GPU_INDEX     = int(os.getenv("GRIDLOCK_GPU_INDEX", "0") or "0")
 
 # ── State ─────────────────────────────────────────────────────────────────────
 
@@ -41,8 +43,13 @@ state = {
     "inference_error": None,
     "inference_backend": None,
     "worker_address": WALLET_ADDR or "",
-    "gpu": gpu_detect.empty_gpu("Detecting…"),
-    "gpu_detected": False,
+    "compute_mode":   COMPUTE_MODE,
+    "gpu_index":      GPU_INDEX,
+    "cpu":            hardware_detect.empty_cpu("Detecting…"),
+    "gpus":           [],
+    "gpu":            hardware_detect.empty_gpu("Detecting…"),
+    "gpu_detected":   False,
+    "effective_compute": "auto",
     "active_job":     None,
     "jobs":           [],
     "tokens_per_sec": 0,
@@ -68,30 +75,37 @@ def _ssl_context() -> ssl.SSLContext:
 
 _SSL_CTX = _ssl_context()
 
-# ── GPU detection ─────────────────────────────────────────────────────────────
+# ── Hardware detection ────────────────────────────────────────────────────────
 
-def detect_gpu() -> bool:
-    stats = gpu_detect.read_gpu_stats()
-    if stats:
-        state["gpu"] = stats
-        state["gpu_detected"] = True
-        log({"event": "gpu_detected", "name": stats["name"], "vram_gb": stats["vram_total_gb"]})
-        return True
-
-    override = os.getenv("GRIDLOCK_HW_TIER", "").strip()
-    state["gpu"] = gpu_detect.empty_gpu(
-        override if override else "No NVIDIA GPU detected — install drivers or add nvidia-smi to PATH"
-    )
-    state["gpu_detected"] = False
-    log({"event": "gpu_not_found", "msg": "nvidia-smi unavailable", "bin": gpu_detect._nvidia_smi_bin()})
-    return False
+def refresh_hardware() -> dict:
+    snap = hardware_detect.scan_hardware(state["compute_mode"], state["gpu_index"])
+    state["cpu"] = snap["cpu"]
+    state["gpus"] = snap["gpus"]
+    state["gpu"] = snap["display"]
+    state["gpu_detected"] = snap["gpu_detected"]
+    state["effective_compute"] = snap["effective_compute"]
+    inference.set_compute_mode(snap["effective_compute"])
+    return snap
 
 
-def refresh_gpu():
-    stats = gpu_detect.read_gpu_stats()
-    if stats:
-        state["gpu"].update(stats)
-        state["gpu_detected"] = True
+def detect_hardware() -> bool:
+    snap = refresh_hardware()
+    log({
+        "event": "hardware_detected",
+        "cpu": snap["cpu"].get("name"),
+        "gpus": [g.get("name") for g in snap["gpus"]],
+        "compute_mode": snap["compute_mode"],
+        "effective_compute": snap["effective_compute"],
+    })
+    return snap["cpu"].get("detected", False) or snap["gpu_detected"]
+
+
+def apply_config(compute_mode: str | None = None, gpu_index: int | None = None) -> dict:
+    if compute_mode is not None:
+        state["compute_mode"] = hardware_detect.normalize_compute_mode(compute_mode)
+    if gpu_index is not None:
+        state["gpu_index"] = max(0, int(gpu_index))
+    return refresh_hardware()
 
 # ── Backend API helpers ───────────────────────────────────────────────────────
 
@@ -144,9 +158,9 @@ def register_with_backend():
         log({"event": "register_skipped", "msg": "wallet required"})
         return
 
-    gpu_name = state["gpu"]["name"]
-    if gpu_name.startswith("No NVIDIA GPU"):
-        gpu_name = os.getenv("GRIDLOCK_HW_TIER", "NVIDIA GPU")
+    hw_tier = hardware_detect.hardware_tier_label(
+        state["compute_mode"], state["cpu"], state["gpus"], state["gpu_index"],
+    )
 
     existing = _req("GET", f"/v1/workers/{quote(addr, safe='')}")
     if existing and existing.get("address"):
@@ -159,10 +173,10 @@ def register_with_backend():
     result = _req("POST", "/v1/workers/register", {
         "operator_pubkey": addr,
         "role":            ROLE,
-        "hardware_tier":   gpu_name,
+        "hardware_tier":   hw_tier,
         "tee_capable":     TEE_CAPABLE,
         "is_confidential": TEE_CAPABLE,
-        "endpoint":        f"desktop://{gpu_name.lower().replace(' ', '-')}",
+        "endpoint":        f"desktop://{hw_tier.lower().replace(' ', '-')}",
     })
 
     if result and result.get("success"):
@@ -401,7 +415,7 @@ def worker_loop():
         }
         log({"event": "job_start", "id": job_id, "tokens": max_tokens, "tier": tier})
 
-        refresh_gpu()
+        refresh_hardware()
 
         try:
             result = inference.run_inference(
@@ -431,7 +445,7 @@ def worker_loop():
             break
 
         state["active_job"]["progress"] = 100.0
-        refresh_gpu()
+        refresh_hardware()
 
         tokens = result["tokens"]
         ttft_ms = result["ttft_ms"]
@@ -469,7 +483,7 @@ def worker_loop():
 
         if state["running"]:
             state["tokens_per_sec"] = 0
-            refresh_gpu()
+            refresh_hardware()
 
 # ── Local HTTP API (for Electron UI) ─────────────────────────────────────────
 
@@ -503,6 +517,11 @@ class Handler(BaseHTTPRequestHandler):
                 "inference_backend": state["inference_backend"],
                 "worker_address":    state["worker_address"],
                 "tee_capable":       TEE_CAPABLE,
+                "compute_mode":      state["compute_mode"],
+                "effective_compute": state["effective_compute"],
+                "gpu_index":         state["gpu_index"],
+                "cpu":               state["cpu"],
+                "gpus":              state["gpus"],
                 "gpu_detected":      state.get("gpu_detected", False),
                 "gpu":               state["gpu"],
                 "active_job":        state["active_job"],
@@ -525,15 +544,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"ok": False, "error": "wallet_required", "message": "Connect your wallet before starting."}, 400)
                 return
 
-            refresh_gpu()
-            if not state.get("gpu_detected"):
-                self._json({
-                    "ok": False,
-                    "error": "gpu_not_found",
-                    "message": (
-                        "NVIDIA GPU not detected. Install GeForce drivers, then verify in PowerShell: nvidia-smi"
-                    ),
-                }, 503)
+            refresh_hardware()
+            ok, err = hardware_detect.can_start(state["compute_mode"], state["cpu"], state["gpus"])
+            if not ok:
+                self._json({"ok": False, "error": "hardware_unavailable", "message": err}, 503)
                 return
 
             if not state["backend_ok"]:
@@ -548,6 +562,7 @@ class Handler(BaseHTTPRequestHandler):
                 return
 
             try:
+                inference.set_compute_mode(state["effective_compute"])
                 backend = inference.resolve_backend()
                 state["inference_ready"] = True
                 state["inference_error"] = None
@@ -567,7 +582,8 @@ class Handler(BaseHTTPRequestHandler):
                 _worker_thread = threading.Thread(target=worker_loop, daemon=True)
                 _worker_thread.start()
                 threading.Thread(target=ws_loop, daemon=True).start()
-            self._json({"ok": True, "backend_ok": state["backend_ok"], "inference_backend": state["inference_backend"]})
+            self._json({"ok": True, "backend_ok": state["backend_ok"], "inference_backend": state["inference_backend"],
+                        "effective_compute": state["effective_compute"]})
 
         elif self.path == "/worker/stop":
             state["running"]        = False
@@ -577,6 +593,22 @@ class Handler(BaseHTTPRequestHandler):
             set_worker_status("Paused")
             send_heartbeat()
             self._json({"ok": True})
+
+        elif self.path == "/config":
+            body = self._read_json()
+            snap = apply_config(
+                compute_mode=body.get("compute_device"),
+                gpu_index=body.get("gpu_index"),
+            )
+            self._json({
+                "ok": True,
+                "compute_mode": state["compute_mode"],
+                "effective_compute": state["effective_compute"],
+                "gpu_index": state["gpu_index"],
+                "cpu": snap["cpu"],
+                "gpus": snap["gpus"],
+                "gpu": snap["display"],
+            })
 
         elif self.path == "/wallet":
             body = self._read_json()
@@ -609,13 +641,18 @@ if __name__ == "__main__":
     parser.add_argument("--backend", default=BACKEND_URL)
     parser.add_argument("--wallet",  default=WALLET_ADDR)
     parser.add_argument("--tee",     action="store_true", default=TEE_CAPABLE)
+    parser.add_argument("--compute", default=COMPUTE_MODE, choices=["auto", "cpu", "gpu"])
+    parser.add_argument("--gpu-index", type=int, default=GPU_INDEX)
     args = parser.parse_args()
 
     BACKEND_URL              = args.backend.rstrip("/")
     state["worker_address"]  = args.wallet or ""
+    state["compute_mode"]    = hardware_detect.normalize_compute_mode(args.compute)
+    state["gpu_index"]       = max(0, args.gpu_index)
     TEE_CAPABLE              = args.tee or TEE_CAPABLE
+    inference.set_compute_mode(state["compute_mode"])
 
-    detect_gpu()
+    detect_hardware()
     if state["worker_address"]:
         register_with_backend()
 
@@ -624,8 +661,8 @@ if __name__ == "__main__":
     hb.start()
 
     server = HTTPServer(("127.0.0.1", args.port), Handler)
-    log({"event": "ready", "port": args.port, "gpu": state["gpu"]["name"],
-         "backend": BACKEND_URL, "backend_ok": state["backend_ok"]})
+    log({"event": "ready", "port": args.port, "device": state["gpu"]["name"],
+         "compute": state["effective_compute"], "backend": BACKEND_URL, "backend_ok": state["backend_ok"]})
 
     try:
         server.serve_forever()

@@ -18,6 +18,24 @@ INFERENCE_PREF = os.getenv("GRIDLOCK_INFERENCE", "auto")
 _ollama_url = (os.getenv("GRIDLOCK_OLLAMA_URL") or "http://127.0.0.1:11434").rstrip("/")
 _active_backend: str | None = None
 _active_model: str | None = None
+_compute_mode: str = "auto"  # auto | cpu | gpu
+
+
+def set_compute_mode(mode: str) -> None:
+    global _compute_mode
+    m = (mode or "auto").strip().lower()
+    _compute_mode = m if m in ("auto", "cpu", "gpu") else "auto"
+
+
+def get_compute_mode() -> str:
+    return _compute_mode
+
+
+def _ollama_num_gpu() -> int:
+    """0 = CPU-only layers; -1 = Ollama default (GPU when available)."""
+    if _compute_mode == "cpu":
+        return 0
+    return -1
 
 
 def get_active_model() -> str:
@@ -128,7 +146,10 @@ def _run_ollama(
         "model": OLLAMA_MODEL,
         "messages": messages,
         "stream": True,
-        "options": {"num_predict": max_tokens},
+        "options": {
+            "num_predict": max_tokens,
+            "num_gpu": _ollama_num_gpu(),
+        },
     }).encode()
 
     req = urllib.request.Request(

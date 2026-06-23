@@ -7,6 +7,8 @@ export const GRIDLOCK_API_URL = (
   process.env.GRIDLOCK_BACKEND_URL ?? 'https://api.reacton.dev'
 ).replace(/\/$/, '')
 
+export type ComputeDevice = 'auto' | 'cpu' | 'gpu'
+
 export interface WorkerSettings {
   wallet: string
   rpcUrl: string
@@ -14,6 +16,8 @@ export interface WorkerSettings {
   autoStart: boolean
   maxVramPct: number
   tier: string
+  computeDevice: ComputeDevice
+  gpuIndex: number
 }
 
 const DEFAULTS: WorkerSettings = {
@@ -23,6 +27,8 @@ const DEFAULTS: WorkerSettings = {
   autoStart: false,
   maxVramPct: 90,
   tier: 'Batch',
+  computeDevice: 'auto',
+  gpuIndex: 0,
 }
 
 function settingsPath(): string {

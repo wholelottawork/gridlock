@@ -78,7 +78,7 @@ export async function dbUpsertWorker(worker: WorkerRecord): Promise<void> {
       hardware_tier: worker.hardware_tier,
       jobs_today: Math.round(worker.jobs_today),
       earnings_today: worker.earnings_today,
-      penalties_paid: Math.round(worker.penalties_paid * 1_000_000) / 1_000_000,
+      penalties_paid: Math.round(worker.penalties_paid),
       is_confidential: worker.is_confidential,
       last_heartbeat: worker.last_heartbeat,
       registered_at: worker.registered_at,

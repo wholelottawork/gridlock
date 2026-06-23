@@ -14,7 +14,7 @@ import {
 } from "@solana/web3.js";
 import { parseAttestationHash } from "./attestation.js";
 import { config, PROGRAM_IDS } from "./config.js";
-import { solanaRpc } from "./solana.js";
+import { solanaRpc, tryPublicKey } from "./solana.js";
 import type { WorkerRecord } from "./types.js";
 
 const TOKEN_2022 = new PublicKey("TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb");
@@ -192,12 +192,16 @@ export async function anchorOpenJob(
 
 export async function anchorAssignWorker(jobId: string, workerPubkey: string): Promise<boolean> {
   if (!config.solanaSettlementEnabled) return false;
+  const worker = tryPublicKey(workerPubkey);
+  if (!worker) {
+    console.log(`[solana] assign_worker skipped: invalid worker pubkey ${workerPubkey.slice(0, 12)}…`);
+    return false;
+  }
   const kp = loadKeypair();
   if (!kp) return false;
 
   const id = jobIdBytes(jobId);
   const jobPda = derivePda(PROGRAM_IDS.jobScheduler, [Buffer.from("job"), id]);
-  const worker = new PublicKey(workerPubkey);
 
   const data = Buffer.concat([anchorDiscriminator("assign_worker"), id, worker.toBuffer()]);
   return sendAndConfirm(PROGRAM_IDS.jobScheduler, data, [

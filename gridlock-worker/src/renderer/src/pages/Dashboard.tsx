@@ -3,7 +3,9 @@ import { motion } from 'framer-motion'
 import { AreaChart, Area, Tooltip, ResponsiveContainer } from 'recharts'
 
 type GPU = {
+  vendor?: string
   name: string
+  index?: number
   vram_used_gb: number
   vram_total_gb: number
   utilization: number
@@ -11,13 +13,24 @@ type GPU = {
   power_w: number
   power_max_w: number
   detected?: boolean
+  stats_available?: boolean
+  cores?: number
+  threads?: number
+}
+
+type CPU = {
+  name: string
+  cores: number
+  threads: number
+  detected?: boolean
 }
 
 type Job = { id: string; status: 'completed' | 'failed'; tokens: number; earn: number; ts: number }
 type ActiveJob = { id: string; progress: number; tokens: number; tier: string }
 
 const EMPTY_GPU: GPU = {
-  name: 'Detecting GPU…',
+  vendor: 'none',
+  name: 'Detecting…',
   vram_used_gb: 0,
   vram_total_gb: 0,
   utilization: 0,
@@ -26,6 +39,8 @@ const EMPTY_GPU: GPU = {
   power_max_w: 0,
   detected: false,
 }
+
+const EMPTY_CPU: CPU = { name: 'Detecting…', cores: 0, threads: 0, detected: false }
 
 function isValidWallet(w: string): boolean {
   const t = w.trim()
@@ -98,6 +113,10 @@ type GridlockApi = {
       backend_ok?: boolean
       last_backend_error?: string | null
       gpu_detected?: boolean
+      compute_mode?: string
+      effective_compute?: string
+      cpu?: CPU | null
+      gpus?: GPU[]
       wallet_connected?: boolean
       inference_backend?: string | null
       worker_address?: string
@@ -131,6 +150,8 @@ export default function Dashboard() {
   const [walletSaving, setWalletSaving] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
   const [gpuDetected, setGpuDetected] = useState(false)
+  const [effectiveCompute, setEffectiveCompute] = useState<'cpu' | 'gpu'>('gpu')
+  const [cpu, setCpu] = useState<CPU>(EMPTY_CPU)
   const [inferenceBackend, setInferenceBackend] = useState<string | null>(null)
   const [gpu, setGpu] = useState<GPU>(EMPTY_GPU)
   const [jobs, setJobs] = useState<Job[]>([])
@@ -160,7 +181,9 @@ export default function Dashboard() {
       try {
         const s = await api.daemon.status()
         if (s.gpu) setGpu(s.gpu)
+        if (s.cpu) setCpu(s.cpu)
         setGpuDetected(Boolean(s.gpu_detected ?? s.gpu?.detected))
+        setEffectiveCompute(s.effective_compute === 'cpu' ? 'cpu' : 'gpu')
         setWorkerOn(s.running)
         setBackendOk(Boolean(s.backend_ok))
         setInferenceBackend(s.inference_backend ?? null)
@@ -232,6 +255,10 @@ export default function Dashboard() {
     }
   }, [workerOn, walletConnected])
 
+  const usingCpu = effectiveCompute === 'cpu' || gpu.vendor === 'cpu'
+  const computeReady = usingCpu ? Boolean(cpu.detected) : gpuDetected
+  const canStartWorker = walletConnected && computeReady
+
   const vramPct = gpu.vram_total_gb > 0 ? (gpu.vram_used_gb / gpu.vram_total_gb) * 100 : 0
   const statusLabel = activeJob ? 'COMPUTING' : workerOn ? 'IDLE' : 'OFFLINE'
   const statusDotColor = workerOn ? 'var(--text-primary)' : 'var(--text-muted)'
@@ -253,21 +280,21 @@ export default function Dashboard() {
             )}
             {inferenceBackend && workerOn && (
               <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)' }}>
-                · {inferenceBackend}
+                · {inferenceBackend}{usingCpu ? ' · CPU' : ' · GPU'}
               </span>
             )}
           </div>
         </div>
         <button
           onClick={toggle}
-          disabled={!workerOn && (!walletConnected || !gpuDetected)}
+          disabled={!workerOn && !canStartWorker}
           style={{
             padding: '8px 22px', borderRadius: 6, fontWeight: 800, fontSize: 11, letterSpacing: '0.8px',
-            background: workerOn ? 'var(--accent-dim)' : walletConnected && gpuDetected ? 'var(--text-primary)' : 'var(--bg-4)',
-            color: workerOn ? 'var(--text-primary)' : walletConnected && gpuDetected ? '#000000' : 'var(--text-muted)',
+            background: workerOn ? 'var(--accent-dim)' : canStartWorker ? 'var(--text-primary)' : 'var(--bg-4)',
+            color: workerOn ? 'var(--text-primary)' : canStartWorker ? '#000000' : 'var(--text-muted)',
             border: workerOn ? '1px solid var(--border-2)' : '1px solid var(--border-2)',
-            cursor: !workerOn && (!walletConnected || !gpuDetected) ? 'not-allowed' : 'pointer',
-            transition: 'all 0.15s', flexShrink: 0, opacity: !workerOn && (!walletConnected || !gpuDetected) ? 0.55 : 1,
+            cursor: !workerOn && !canStartWorker ? 'not-allowed' : 'pointer',
+            transition: 'all 0.15s', flexShrink: 0, opacity: !workerOn && !canStartWorker ? 0.55 : 1,
           }}
         >
           {workerOn ? 'STOP' : 'START WORKER'}
@@ -322,28 +349,54 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* GPU card */}
+      {/* Hardware card */}
       <div className="card" style={{ marginBottom: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <CircleGauge pct={gpu.utilization} label="GPU" value={`${Math.round(gpu.utilization)}%`} size={88} stroke={6} />
-          <CircleGauge pct={vramPct} label="VRAM" value={`${gpu.vram_used_gb.toFixed(0)}G`} size={88} stroke={6} />
-          <div style={{ flex: 1, paddingLeft: 4 }}>
-            <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 10 }}>{gpu.name}</div>
-            {!gpuDetected && (
-              <div style={{ fontSize: 11, color: 'var(--error)', fontWeight: 600, marginBottom: 10, lineHeight: 1.5 }}>
-                Install NVIDIA GeForce drivers, then run <span className="mono">nvidia-smi</span> in PowerShell to verify.
+        <div style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '1.2px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 12 }}>
+          {usingCpu ? 'CPU COMPUTE' : 'GPU COMPUTE'}
+        </div>
+        {usingCpu ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <CircleGauge pct={workerOn && tokensPerSec > 0 ? Math.min(100, tokensPerSec / 2) : 0} label="LOAD" value={workerOn ? 'ON' : '—'} size={88} stroke={6} />
+            <div style={{ flex: 1 }}>
+              <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 8 }}>{cpu.name}</div>
+              <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.6, marginBottom: 8 }}>
+                Ollama runs on CPU. Slower than GPU but works without a graphics card.
               </div>
-            )}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <StatBar label="VRAM" pct={vramPct} valueLabel={`${gpu.vram_used_gb.toFixed(1)} / ${gpu.vram_total_gb} GB`} />
-              <StatBar label="POWER" pct={gpu.power_max_w > 0 ? (gpu.power_w / gpu.power_max_w) * 100 : 0} valueLabel={`${Math.round(gpu.power_w)}W`} />
-            </div>
-            <div style={{ display: 'flex', gap: 14, marginTop: 10, fontSize: 10 }}>
-              <span style={{ color: 'var(--text-muted)' }}>Temp <strong style={{ color: 'var(--text-secondary)' }}>{gpu.temperature}°C</strong></span>
-              <span style={{ color: 'var(--text-muted)' }}>Max <strong style={{ color: 'var(--text-secondary)' }}>{gpu.power_max_w}W</strong></span>
+              <div style={{ display: 'flex', gap: 14, fontSize: 10 }}>
+                <span style={{ color: 'var(--text-muted)' }}>Cores <strong style={{ color: 'var(--text-secondary)' }}>{cpu.cores || '—'}</strong></span>
+                <span style={{ color: 'var(--text-muted)' }}>Threads <strong style={{ color: 'var(--text-secondary)' }}>{cpu.threads || '—'}</strong></span>
+              </div>
             </div>
           </div>
-        </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <CircleGauge pct={gpu.utilization} label="GPU" value={`${Math.round(gpu.utilization)}%`} size={88} stroke={6} />
+            <CircleGauge pct={vramPct} label="VRAM" value={`${gpu.vram_used_gb.toFixed(0)}G`} size={88} stroke={6} />
+            <div style={{ flex: 1, paddingLeft: 4 }}>
+              <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 4 }}>
+                {gpu.vendor && gpu.vendor !== 'none' ? `${gpu.vendor.toUpperCase()} · ` : ''}{gpu.name}
+              </div>
+              {!gpuDetected && (
+                <div style={{ fontSize: 11, color: 'var(--error)', fontWeight: 600, marginBottom: 10, lineHeight: 1.5 }}>
+                  No GPU detected. Switch to CPU in Settings, or install NVIDIA / AMD drivers.
+                </div>
+              )}
+              {gpuDetected && !gpu.stats_available && (
+                <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 10, lineHeight: 1.5 }}>
+                  GPU detected. Live stats require NVIDIA drivers or ROCm (AMD).
+                </div>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <StatBar label="VRAM" pct={vramPct} valueLabel={`${gpu.vram_used_gb.toFixed(1)} / ${gpu.vram_total_gb} GB`} />
+                <StatBar label="POWER" pct={gpu.power_max_w > 0 ? (gpu.power_w / gpu.power_max_w) * 100 : 0} valueLabel={`${Math.round(gpu.power_w)}W`} />
+              </div>
+              <div style={{ display: 'flex', gap: 14, marginTop: 10, fontSize: 10 }}>
+                <span style={{ color: 'var(--text-muted)' }}>Temp <strong style={{ color: 'var(--text-secondary)' }}>{gpu.temperature}°C</strong></span>
+                <span style={{ color: 'var(--text-muted)' }}>Max <strong style={{ color: 'var(--text-secondary)' }}>{gpu.power_max_w}W</strong></span>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Stats */}

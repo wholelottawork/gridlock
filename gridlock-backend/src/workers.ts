@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { randomUUID } from "node:crypto";
 import { config, computeFee, PENALTY_MULT, SLA_TARGETS } from "./config.js";
 import { dbUpsertWorker } from "./db.js";
+import { isValidSolanaPubkey } from "./solana.js";
 import { appendJob, jobsStore, setWorkersRegistry, workersRegistry } from "./state.js";
 import { slaTiersForWorker } from "./tee-capacity.js";
 import type { JobRecord, WorkerRecord } from "./types.js";
@@ -84,12 +85,17 @@ export function seedJobs(workers: WorkerRecord[]): void {
 }
 
 function activeForTier(slaTier: string, confidential: boolean): WorkerRecord[] {
-  return workersRegistry.filter(
+  let pool = workersRegistry.filter(
     (w) =>
       w.status === "Active" &&
       w.sla_tiers.includes(slaTier) &&
       (!confidential || w.tee_capable),
   );
+  if (config.solanaSettlementEnabled) {
+    const valid = pool.filter((w) => isValidSolanaPubkey(w.address));
+    if (valid.length) pool = valid;
+  }
+  return pool;
 }
 
 export function pickPrefillWorker(

@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
 export type DaemonEvent = { event: string; [k: string]: unknown }
+export type ComputeDevice = 'auto' | 'cpu' | 'gpu'
+
 export type WorkerSettings = {
   wallet: string
   rpcUrl: string
@@ -8,15 +10,30 @@ export type WorkerSettings = {
   autoStart: boolean
   maxVramPct: number
   tier: string
+  computeDevice: ComputeDevice
+  gpuIndex: number
 }
+
 export type GPUInfo = {
+  vendor?: string
   name: string
+  index?: number
   vram_used_gb: number
   vram_total_gb: number
   utilization: number
   temperature: number
   power_w: number
   power_max_w: number
+  detected?: boolean
+  stats_available?: boolean
+  cores?: number
+  threads?: number
+}
+
+export type CPUInfo = {
+  name: string
+  cores: number
+  threads: number
   detected?: boolean
 }
 
@@ -32,6 +49,12 @@ const api = {
       inference_backend?: string | null
       worker_address?: string
       tee_capable?: boolean
+      compute_mode?: ComputeDevice
+      effective_compute?: ComputeDevice | 'gpu' | 'cpu'
+      gpu_index?: number
+      cpu?: CPUInfo | null
+      gpus?: GPUInfo[]
+      gpu_detected?: boolean
       gpu: GPUInfo | null
       active_job: unknown
       tokens_per_sec: number
