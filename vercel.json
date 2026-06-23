@@ -1,6 +1,7 @@
 {
-  "buildCommand": "cd gridlock-web && npm install && npm run build",
-  "outputDirectory": "gridlock-web/.next",
+  "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "devCommand": "cd gridlock-web && npm run dev"
+  "installCommand": "npm install --prefix gridlock-web",
+  "buildCommand": "npm run build --prefix gridlock-web",
+  "outputDirectory": "gridlock-web/.next"
 }
