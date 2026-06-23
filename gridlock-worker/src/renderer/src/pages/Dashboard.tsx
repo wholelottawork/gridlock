@@ -10,22 +10,27 @@ type GPU = {
   temperature: number
   power_w: number
   power_max_w: number
+  detected?: boolean
 }
 
 type Job = { id: string; status: 'completed' | 'failed'; tokens: number; earn: number; ts: number }
 type ActiveJob = { id: string; progress: number; tokens: number; tier: string }
 
-const MOCK_GPU: GPU = {
-  name: 'RTX 4090',
-  vram_used_gb: 16.2,
-  vram_total_gb: 24.0,
+const EMPTY_GPU: GPU = {
+  name: 'Detecting GPU…',
+  vram_used_gb: 0,
+  vram_total_gb: 0,
   utilization: 0,
-  temperature: 45,
-  power_w: 80,
-  power_max_w: 450
+  temperature: 0,
+  power_w: 0,
+  power_max_w: 0,
+  detected: false,
 }
 
-const TIERS = ['Nano', 'Micro', 'Batch', 'Realtime']
+function isValidWallet(w: string): boolean {
+  const t = w.trim()
+  return t.length >= 32 && t.length <= 64
+}
 
 function CircleGauge({ pct, size = 90, stroke = 6, label, value }: {
   pct: number; size?: number; stroke?: number; label: string; value: string
@@ -86,9 +91,48 @@ function StatBar({ label, pct, valueLabel }: { label: string; pct: number; value
   )
 }
 
+type GridlockApi = {
+      daemon: {
+    status: () => Promise<{
+      running: boolean
+      backend_ok?: boolean
+      last_backend_error?: string | null
+      gpu_detected?: boolean
+      wallet_connected?: boolean
+      inference_backend?: string | null
+      worker_address?: string
+      gpu: GPU | null
+      active_job: ActiveJob | null
+      tokens_per_sec: number
+      jobs_today: number
+      earnings_today: number
+    }>
+  }
+  worker: {
+    start: () => Promise<{ ok: boolean; error?: string; message?: string }>
+    stop: () => Promise<{ ok: boolean }>
+    jobs: () => Promise<{ jobs: Job[] }>
+  }
+  settings: {
+    load: () => Promise<{ wallet?: string; rpcUrl?: string; teeMode?: boolean; autoStart?: boolean; maxVramPct?: number; tier?: string }>
+    save: (cfg: unknown) => Promise<{ ok: boolean }>
+  }
+}
+
+function gl(): GridlockApi | undefined {
+  return (window as unknown as { gridlock?: GridlockApi }).gridlock
+}
+
 export default function Dashboard() {
   const [workerOn, setWorkerOn] = useState(false)
-  const [gpu, setGpu] = useState<GPU>(MOCK_GPU)
+  const [backendOk, setBackendOk] = useState(false)
+  const [wallet, setWallet] = useState('')
+  const [walletInput, setWalletInput] = useState('')
+  const [walletSaving, setWalletSaving] = useState(false)
+  const [startError, setStartError] = useState<string | null>(null)
+  const [gpuDetected, setGpuDetected] = useState(false)
+  const [inferenceBackend, setInferenceBackend] = useState<string | null>(null)
+  const [gpu, setGpu] = useState<GPU>(EMPTY_GPU)
   const [jobs, setJobs] = useState<Job[]>([])
   const [activeJob, setActiveJob] = useState<ActiveJob | null>(null)
   const [tokensPerSec, setTokensPerSec] = useState(0)
@@ -98,78 +142,97 @@ export default function Dashboard() {
     Array.from({ length: 40 }, (_, i) => ({ t: i, v: 0 }))
   )
 
+  const walletConnected = isValidWallet(wallet)
+
   useEffect(() => {
-    const gl = (window as unknown as { gridlock?: { daemon: { status: () => Promise<{ running: boolean; gpu: GPU | null; active_job: ActiveJob | null; tokens_per_sec: number; jobs_today: number; earnings_today: number }> } } }).gridlock
-    if (!gl) return
+    gl()?.settings.load().then((cfg) => {
+      if (cfg.wallet) {
+        setWallet(cfg.wallet)
+        setWalletInput(cfg.wallet)
+      }
+    }).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    const api = gl()
+    if (!api) return
     const poll = async () => {
       try {
-        const s = await gl.daemon.status()
+        const s = await api.daemon.status()
         if (s.gpu) setGpu(s.gpu)
+        setGpuDetected(Boolean(s.gpu_detected ?? s.gpu?.detected))
         setWorkerOn(s.running)
+        setBackendOk(Boolean(s.backend_ok))
+        setInferenceBackend(s.inference_backend ?? null)
+        if (s.worker_address && isValidWallet(s.worker_address)) {
+          setWallet(s.worker_address)
+        }
         setTokensPerSec(s.tokens_per_sec ?? 0)
         setJobsToday(s.jobs_today ?? 0)
         setEarningsToday(s.earnings_today ?? 0)
         if (s.active_job) setActiveJob(s.active_job as ActiveJob)
         else if (!s.running) setActiveJob(null)
-      } catch {}
+        if (s.tokens_per_sec > 0) {
+          setHistory(h => [...h.slice(1), { t: h[h.length - 1].t + 1, v: Math.round(s.tokens_per_sec) }])
+        }
+
+        const j = await api.worker.jobs()
+        setJobs(j.jobs as Job[])
+      } catch { /* daemon starting */ }
     }
     poll()
     const iv = setInterval(poll, 1200)
     return () => clearInterval(iv)
   }, [])
 
-  useEffect(() => {
-    if (!workerOn) {
-      setGpu(g => ({ ...g, utilization: 0, power_w: 80 }))
-      setTokensPerSec(0)
-      return
+  const connectWallet = useCallback(async () => {
+    const addr = walletInput.trim()
+    if (!isValidWallet(addr)) return
+    setWalletSaving(true)
+    setStartError(null)
+    try {
+      const cfg = await gl()?.settings.load()
+      await gl()?.settings.save({ ...cfg, wallet: addr })
+      setWallet(addr)
+      await new Promise(r => setTimeout(r, 800))
+      const s = await gl()?.daemon.status()
+      if (s && !s.backend_ok) {
+        setStartError(s.last_backend_error ?? 'Connected wallet but Gridlock registration failed.')
+      }
+    } catch {
+      setStartError('Failed to save wallet.')
+    } finally {
+      setWalletSaving(false)
     }
-    const iv = setInterval(() => {
-      const gl = (window as unknown as { gridlock?: unknown }).gridlock
-      if (gl) return
-      setGpu(g => ({
-        ...g,
-        utilization: Math.min(97, Math.max(62, g.utilization + (Math.random() - 0.4) * 9)),
-        vram_used_gb: Math.min(22, Math.max(14, g.vram_used_gb + (Math.random() - 0.5) * 0.4)),
-        temperature: Math.min(84, Math.max(65, g.temperature + (Math.random() - 0.5) * 2)),
-        power_w: Math.min(430, Math.max(320, g.power_w + (Math.random() - 0.5) * 22))
-      }))
-      setTokensPerSec(v => Math.max(1800, Math.min(3500, v || 2400) + (Math.random() - 0.5) * 200))
-      setHistory(h => [...h.slice(1), { t: h[h.length - 1].t + 1, v: Math.floor(2000 + Math.random() * 1400) }])
-      setActiveJob(j => {
-        if (!j) {
-          if (Math.random() < 0.12)
-            return { id: Math.random().toString(16).slice(2, 10), progress: 0, tokens: [512, 1024, 2048, 4096][Math.floor(Math.random() * 4)], tier: TIERS[Math.floor(Math.random() * 4)] }
-          return null
-        }
-        const next = j.progress + Math.random() * 14
-        if (next >= 100) {
-          const earn = +((j.tokens / 1_000_000) * 8.5).toFixed(4)
-          setJobs(prev => [{ id: j.id, status: 'completed', tokens: j.tokens, earn, ts: Date.now() }, ...prev.slice(0, 14)])
-          setEarningsToday(e => +(e + earn).toFixed(4))
-          setJobsToday(n => n + 1)
-          setHistory(h => [...h.slice(1), { t: h[h.length - 1].t + 1, v: Math.floor(2400 + Math.random() * 1000) }])
-          return null
-        }
-        return { ...j, progress: next }
-      })
-    }, 700)
-    return () => clearInterval(iv)
-  }, [workerOn])
+  }, [walletInput])
 
   const toggle = useCallback(async () => {
-    const gl = (window as unknown as { gridlock?: { worker: { start: () => Promise<{ ok: boolean }>; stop: () => Promise<{ ok: boolean }> } } }).gridlock
+    const api = gl()
     if (!workerOn) {
-      try { await gl?.worker.start() } catch {}
-      setWorkerOn(true)
+      if (!walletConnected) {
+        setStartError('Connect your wallet before starting.')
+        return
+      }
+      setStartError(null)
+      try {
+        const res = await api?.worker.start()
+        if (!res?.ok) {
+          setStartError(res?.message ?? 'Could not start worker.')
+          return
+        }
+        setWorkerOn(true)
+      } catch {
+        setStartError('Worker daemon not responding.')
+      }
     } else {
-      try { await gl?.worker.stop() } catch {}
+      try { await api?.worker.stop() } catch {}
       setWorkerOn(false)
       setActiveJob(null)
+      setStartError(null)
     }
-  }, [workerOn])
+  }, [workerOn, walletConnected])
 
-  const vramPct = (gpu.vram_used_gb / gpu.vram_total_gb) * 100
+  const vramPct = gpu.vram_total_gb > 0 ? (gpu.vram_used_gb / gpu.vram_total_gb) * 100 : 0
   const statusLabel = activeJob ? 'COMPUTING' : workerOn ? 'IDLE' : 'OFFLINE'
   const statusDotColor = workerOn ? 'var(--text-primary)' : 'var(--text-muted)'
 
@@ -180,21 +243,84 @@ export default function Dashboard() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
         <div>
           <div style={{ fontSize: 18, fontWeight: 900, letterSpacing: '-0.2px', marginBottom: 4 }}>Dashboard</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
             <span className={workerOn ? 'pulse-dot' : ''} style={{ display: 'inline-block', width: 5, height: 5, borderRadius: '50%', background: statusDotColor }} />
             <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '1px', color: 'var(--text-muted)' }}>{statusLabel}</span>
+            {walletConnected && (
+              <span style={{ fontSize: 10, fontWeight: 700, color: backendOk ? 'var(--success)' : 'var(--text-muted)' }}>
+                · Gridlock {backendOk ? 'connected' : 'pending'}
+              </span>
+            )}
+            {inferenceBackend && workerOn && (
+              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)' }}>
+                · {inferenceBackend}
+              </span>
+            )}
           </div>
         </div>
-        <button onClick={toggle} style={{
-          padding: '8px 22px', borderRadius: 6, fontWeight: 800, fontSize: 11, letterSpacing: '0.8px',
-          background: workerOn ? 'var(--accent-dim)' : 'var(--text-primary)',
-          color: workerOn ? 'var(--text-primary)' : '#000000',
-          border: workerOn ? '1px solid var(--border-2)' : '1px solid var(--text-primary)',
-          cursor: 'pointer', transition: 'all 0.15s', flexShrink: 0,
-        }}>
+        <button
+          onClick={toggle}
+          disabled={!workerOn && (!walletConnected || !gpuDetected)}
+          style={{
+            padding: '8px 22px', borderRadius: 6, fontWeight: 800, fontSize: 11, letterSpacing: '0.8px',
+            background: workerOn ? 'var(--accent-dim)' : walletConnected && gpuDetected ? 'var(--text-primary)' : 'var(--bg-4)',
+            color: workerOn ? 'var(--text-primary)' : walletConnected && gpuDetected ? '#000000' : 'var(--text-muted)',
+            border: workerOn ? '1px solid var(--border-2)' : '1px solid var(--border-2)',
+            cursor: !workerOn && (!walletConnected || !gpuDetected) ? 'not-allowed' : 'pointer',
+            transition: 'all 0.15s', flexShrink: 0, opacity: !workerOn && (!walletConnected || !gpuDetected) ? 0.55 : 1,
+          }}
+        >
           {workerOn ? 'STOP' : 'START WORKER'}
         </button>
       </div>
+
+      {/* Wallet gate */}
+      {!walletConnected && (
+        <div className="card" style={{ marginBottom: 12, border: '1px solid var(--border-2)' }}>
+          <div style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '1.2px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 10 }}>
+            CONNECT WALLET
+          </div>
+          <p style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 14, lineHeight: 1.55 }}>
+            Enter your Solana wallet address to register as a worker and receive earnings.
+          </p>
+          <input
+            value={walletInput}
+            onChange={e => setWalletInput(e.target.value)}
+            placeholder="Solana wallet address…"
+            className="mono"
+            style={{ fontSize: 12, marginBottom: 10, width: '100%' }}
+            onKeyDown={e => e.key === 'Enter' && connectWallet()}
+          />
+          <button
+            onClick={connectWallet}
+            disabled={!isValidWallet(walletInput) || walletSaving}
+            style={{
+              width: '100%', padding: '10px 0', borderRadius: 6, fontWeight: 800, fontSize: 12,
+              background: isValidWallet(walletInput) ? 'var(--text-primary)' : 'var(--bg-4)',
+              color: isValidWallet(walletInput) ? '#000000' : 'var(--text-muted)',
+              border: '1px solid var(--border-2)', cursor: isValidWallet(walletInput) ? 'pointer' : 'not-allowed',
+            }}
+          >
+            {walletSaving ? 'CONNECTING…' : 'CONNECT WALLET'}
+          </button>
+        </div>
+      )}
+
+      {walletConnected && (
+        <div className="card" style={{ marginBottom: 12, padding: '10px 13px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <div style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '1.2px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 4 }}>WALLET</div>
+            <div className="mono" style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{wallet.slice(0, 8)}…{wallet.slice(-6)}</div>
+          </div>
+          <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--success)' }}>CONNECTED</span>
+        </div>
+      )}
+
+      {startError && (
+        <div style={{ marginBottom: 12, padding: '10px 13px', borderRadius: 6, background: 'rgba(255,80,80,0.08)', border: '1px solid rgba(255,80,80,0.25)', fontSize: 12, color: 'var(--error)', fontWeight: 600 }}>
+          {startError}
+        </div>
+      )}
 
       {/* GPU card */}
       <div className="card" style={{ marginBottom: 12 }}>
@@ -203,9 +329,14 @@ export default function Dashboard() {
           <CircleGauge pct={vramPct} label="VRAM" value={`${gpu.vram_used_gb.toFixed(0)}G`} size={88} stroke={6} />
           <div style={{ flex: 1, paddingLeft: 4 }}>
             <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 10 }}>{gpu.name}</div>
+            {!gpuDetected && (
+              <div style={{ fontSize: 11, color: 'var(--error)', fontWeight: 600, marginBottom: 10, lineHeight: 1.5 }}>
+                Install NVIDIA GeForce drivers, then run <span className="mono">nvidia-smi</span> in PowerShell to verify.
+              </div>
+            )}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <StatBar label="VRAM" pct={vramPct} valueLabel={`${gpu.vram_used_gb.toFixed(1)} / ${gpu.vram_total_gb} GB`} />
-              <StatBar label="POWER" pct={(gpu.power_w / gpu.power_max_w) * 100} valueLabel={`${Math.round(gpu.power_w)}W`} />
+              <StatBar label="POWER" pct={gpu.power_max_w > 0 ? (gpu.power_w / gpu.power_max_w) * 100 : 0} valueLabel={`${Math.round(gpu.power_w)}W`} />
             </div>
             <div style={{ display: 'flex', gap: 14, marginTop: 10, fontSize: 10 }}>
               <span style={{ color: 'var(--text-muted)' }}>Temp <strong style={{ color: 'var(--text-secondary)' }}>{gpu.temperature}°C</strong></span>
@@ -219,7 +350,7 @@ export default function Dashboard() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 10, marginBottom: 12 }}>
         {[
           { label: 'JOBS TODAY',   val: jobsToday.toString() },
-          { label: 'TOKENS / SEC', val: workerOn ? Math.round(tokensPerSec).toLocaleString() : '—' },
+          { label: 'TOKENS / SEC', val: workerOn && tokensPerSec > 0 ? Math.round(tokensPerSec).toLocaleString() : '—' },
           { label: 'EARNED TODAY', val: `${earningsToday.toFixed(4)} $LOCK` },
         ].map(s => (
           <div key={s.label} className="card" style={{ padding: '11px 13px' }}>
@@ -229,8 +360,7 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Throughput chart */}
-      {workerOn && (
+      {workerOn && history.some(h => h.v > 0) && (
         <div className="card" style={{ marginBottom: 12, padding: '11px 13px' }}>
           <div style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '1.2px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 9 }}>THROUGHPUT</div>
           <ResponsiveContainer width="100%" height={46}>
@@ -252,13 +382,12 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Active job */}
       {activeJob && (
         <div className="card" style={{ marginBottom: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
             <div style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '1.2px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>CURRENT JOB</div>
             <div style={{ display: 'flex', gap: 10, fontSize: 10, color: 'var(--text-muted)' }}>
-              <span>{activeJob.tier ?? 'Batch'}</span>
+              <span>{activeJob.tier ?? 'standard'}</span>
               <span className="mono" style={{ color: 'var(--text-secondary)' }}>#{activeJob.id.slice(0, 8)}</span>
             </div>
           </div>
@@ -269,20 +398,23 @@ export default function Dashboard() {
             />
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--text-muted)' }}>
-            <span>{activeJob.tokens.toLocaleString()} tokens</span>
+            <span>{activeJob.tokens.toLocaleString()} tokens max</span>
             <span>{Math.min(100, Math.floor(activeJob.progress))}%</span>
           </div>
         </div>
       )}
 
-      {/* Recent jobs */}
       <div className="card" style={{ padding: 0 }}>
         <div style={{ padding: '9px 13px', borderBottom: '1px solid var(--border)' }}>
           <span style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '1.2px', color: 'var(--text-muted)', textTransform: 'uppercase' }}>RECENT JOBS</span>
         </div>
         {jobs.length === 0 ? (
-          <div style={{ padding: '22px 13px', textAlign: 'center', color: 'var(--text-primary)', fontSize: 13, fontWeight: 800 }}>
-            {workerOn ? 'Waiting for first job…' : 'Start the worker to begin earning'}
+          <div style={{ padding: '22px 13px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 12, fontWeight: 600 }}>
+            {!walletConnected
+              ? 'Connect wallet to begin'
+              : workerOn
+                ? 'Waiting for jobs from Gridlock…'
+                : 'Start the worker to accept jobs'}
           </div>
         ) : (
           jobs.slice(0, 8).map(j => (

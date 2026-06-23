@@ -1,4 +1,17 @@
-const BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
+/** Same backend the desktop worker uses in production (api.reacton.dev). */
+export function resolveApiBaseUrl(): string {
+  const fromEnv = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
+  if (fromEnv) return fromEnv;
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    if (host !== "localhost" && host !== "127.0.0.1") {
+      return "https://api.reacton.dev";
+    }
+  }
+  return "http://localhost:8080";
+}
+
+const BASE_URL = resolveApiBaseUrl();
 
 async function get<T>(path: string): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, { cache: "no-store" });
@@ -56,6 +69,12 @@ export interface ApiWorker {
   last_heartbeat: number;
   registered_at: number;
   grid_points?: number;
+  ws_online?: boolean;
+  ws_worker_type?: "browser" | "native" | "desktop" | null;
+  ws_busy?: boolean;
+  ws_model?: string | null;
+  ws_tok_per_sec?: number;
+  in_flight?: number;
 }
 
 export interface ApiNetworkStats {

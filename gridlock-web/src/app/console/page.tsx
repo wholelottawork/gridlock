@@ -548,7 +548,7 @@ export default function ConsolePage() {
       {tab === "monitor" && (
         <div className="card">
           <div style={{ fontSize: 10, color: "var(--text-primary)", fontWeight: 900, letterSpacing: "1px", marginBottom: 14 }}>
-            LIVE REQUEST STREAM — {realJobs ? `${realJobs.length} from backend` : `${mockJobs.length} simulated`}
+            LIVE REQUEST STREAM — {realJobs ? `${realJobs.length}` : `${mockJobs.length} simulated`}
           </div>
           <div style={{ overflowX: "auto" }}>
             {realJobs && realJobs.length > 0 ? (

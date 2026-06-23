@@ -24,7 +24,13 @@ app.use(
 );
 
 app.use("*", async (c, next) => {
-  if (!config.apiKeys.size || OPEN_PATHS.has(c.req.path)) {
+  const path = c.req.path;
+  const workerPublic =
+    path === "/v1/workers/register"
+    || path === "/v1/workers/heartbeat"
+    || path.startsWith("/v1/workers/")
+    || path.startsWith("/v1/jobs");
+  if (!config.apiKeys.size || OPEN_PATHS.has(path) || workerPublic) {
     return next();
   }
   const key = (c.req.header("Authorization") ?? "").replace(/^Bearer\s+/i, "").trim();

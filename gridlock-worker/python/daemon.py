@@ -4,30 +4,31 @@ Gridlock Worker Daemon
 - Detects local GPU via nvidia-smi
 - Registers with the Gridlock backend (BACKEND_URL)
 - Sends heartbeats every 30 s
-- Polls for jobs and simulates/runs inference
+- Polls for jobs and runs inference via Ollama/vLLM
 - Exposes a local HTTP API on :7420 for the Electron UI
 """
 
 import argparse
+import hashlib
 import json
 import os
-import random
-import subprocess
-import sys
+import ssl
 import threading
 import time
-import urllib.request
 import urllib.error
+import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from urllib.parse import quote
 
 from job_messages import prepare_inference_messages
+import inference
+import gpu_detect
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-BACKEND_URL  = os.getenv("GRIDLOCK_BACKEND_URL", "http://localhost:8080")
+BACKEND_URL  = os.getenv("GRIDLOCK_BACKEND_URL", "https://api.reacton.dev")
 WALLET_ADDR  = os.getenv("GRIDLOCK_WALLET", "")
-HARDWARE_TIER = os.getenv("GRIDLOCK_HW_TIER", "RTX 4090")
-ROLE          = os.getenv("GRIDLOCK_ROLE", "Decode")
+ROLE          = os.getenv("GRIDLOCK_ROLE", "Prefill")
 TEE_CAPABLE   = os.getenv("GRIDLOCK_TEE", "false").lower() == "true"
 
 # ── State ─────────────────────────────────────────────────────────────────────
@@ -35,16 +36,13 @@ TEE_CAPABLE   = os.getenv("GRIDLOCK_TEE", "false").lower() == "true"
 state = {
     "running":        False,
     "backend_ok":     False,
+    "last_backend_error": None,
+    "inference_ready": False,
+    "inference_error": None,
+    "inference_backend": None,
     "worker_address": WALLET_ADDR or "",
-    "gpu": {
-        "name":         "Detecting…",
-        "vram_used_gb": 0.0,
-        "vram_total_gb": 0.0,
-        "utilization":  0,
-        "temperature":  45,
-        "power_w":      80,
-        "power_max_w":  350,
-    },
+    "gpu": gpu_detect.empty_gpu("Detecting…"),
+    "gpu_detected": False,
     "active_job":     None,
     "jobs":           [],
     "tokens_per_sec": 0,
@@ -59,89 +57,128 @@ state = {
 
 _worker_thread: threading.Thread | None = None
 
+
+def _ssl_context() -> ssl.SSLContext:
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        return ssl.create_default_context()
+
+
+_SSL_CTX = _ssl_context()
+
 # ── GPU detection ─────────────────────────────────────────────────────────────
 
 def detect_gpu() -> bool:
-    try:
-        out = subprocess.check_output(
-            ["nvidia-smi",
-             "--query-gpu=name,memory.used,memory.total,utilization.gpu,temperature.gpu,power.draw,power.max.limit",
-             "--format=csv,noheader,nounits"],
-            stderr=subprocess.DEVNULL, timeout=5,
-        ).decode().strip().splitlines()[0]
-        p = [x.strip() for x in out.split(",")]
-        state["gpu"] = {
-            "name":          p[0],
-            "vram_used_gb":  round(float(p[1]) / 1024, 1),
-            "vram_total_gb": round(float(p[2]) / 1024, 1),
-            "utilization":   int(float(p[3])),
-            "temperature":   int(float(p[4])),
-            "power_w":       round(float(p[5])),
-            "power_max_w":   round(float(p[6])),
-        }
+    stats = gpu_detect.read_gpu_stats()
+    if stats:
+        state["gpu"] = stats
+        state["gpu_detected"] = True
+        log({"event": "gpu_detected", "name": stats["name"], "vram_gb": stats["vram_total_gb"]})
         return True
-    except Exception:
-        state["gpu"] = {
-            "name":          f"{HARDWARE_TIER} (mock)",
-            "vram_used_gb":  16.2,
-            "vram_total_gb": 24.0,
-            "utilization":   0,
-            "temperature":   45,
-            "power_w":       80,
-            "power_max_w":   450,
-        }
-        log({"event": "gpu_mock", "msg": "nvidia-smi not found — running mock GPU"})
-        return False
+
+    override = os.getenv("GRIDLOCK_HW_TIER", "").strip()
+    state["gpu"] = gpu_detect.empty_gpu(
+        override if override else "No NVIDIA GPU detected — install drivers or add nvidia-smi to PATH"
+    )
+    state["gpu_detected"] = False
+    log({"event": "gpu_not_found", "msg": "nvidia-smi unavailable", "bin": gpu_detect._nvidia_smi_bin()})
+    return False
 
 
 def refresh_gpu():
-    try:
-        out = subprocess.check_output(
-            ["nvidia-smi",
-             "--query-gpu=utilization.gpu,temperature.gpu,power.draw,memory.used",
-             "--format=csv,noheader,nounits"],
-            stderr=subprocess.DEVNULL, timeout=3,
-        ).decode().strip().splitlines()[0]
-        p = [x.strip() for x in out.split(",")]
-        state["gpu"]["utilization"]  = int(float(p[0]))
-        state["gpu"]["temperature"]  = int(float(p[1]))
-        state["gpu"]["power_w"]      = round(float(p[2]))
-        state["gpu"]["vram_used_gb"] = round(float(p[3]) / 1024, 1)
-    except Exception:
-        pass   # mock mode — worker loop drives the numbers
+    stats = gpu_detect.read_gpu_stats()
+    if stats:
+        state["gpu"].update(stats)
+        state["gpu_detected"] = True
 
 # ── Backend API helpers ───────────────────────────────────────────────────────
 
+def compute_job_attestation_hash(job_id: str, worker_address: str, response: str) -> str:
+    payload = json.dumps({
+        "jobId": job_id,
+        "workerAddress": worker_address,
+        "response": response[:512],
+    })
+    return hashlib.sha256(payload.encode()).hexdigest()
+
+
 def _req(method: str, path: str, body: dict | None = None) -> dict | None:
-    url  = f"{BACKEND_URL}{path}"
+    url  = f"{BACKEND_URL.rstrip('/')}{path}"
     data = json.dumps(body).encode() if body else None
-    req  = urllib.request.Request(url, data=data, method=method,
-                                   headers={"Content-Type": "application/json"})
+    req  = urllib.request.Request(
+        url,
+        data=data,
+        method=method,
+        headers={
+            "Content-Type": "application/json",
+            "User-Agent": "Gridlock-Worker/0.1.0",
+        },
+    )
     try:
-        with urllib.request.urlopen(req, timeout=8) as r:
+        with urllib.request.urlopen(req, timeout=15, context=_SSL_CTX) as r:
+            state["last_backend_error"] = None
             return json.loads(r.read())
+    except urllib.error.HTTPError as e:
+        try:
+            err_body = json.loads(e.read())
+        except Exception:
+            err_body = {"error": str(e)}
+        log({"event": "backend_error", "path": path, "status": e.code, "err": err_body})
+        if e.code == 409:
+            return {"error": "already_registered", "status": 409}
+        state["last_backend_error"] = err_body.get("error") or f"HTTP {e.code} on {path}"
+        return None
     except Exception as e:
-        log({"event": "backend_error", "path": path, "err": str(e)})
+        err = str(e)
+        state["last_backend_error"] = err
+        log({"event": "backend_error", "path": path, "err": err})
         return None
 
 
 def register_with_backend():
-    gpu_name = state["gpu"]["name"].replace(" (mock)", "")
+    addr = (state["worker_address"] or "").strip()
+    if not addr or len(addr) < 20:
+        state["backend_ok"] = False
+        log({"event": "register_skipped", "msg": "wallet required"})
+        return
+
+    gpu_name = state["gpu"]["name"]
+    if gpu_name.startswith("No NVIDIA GPU"):
+        gpu_name = os.getenv("GRIDLOCK_HW_TIER", "NVIDIA GPU")
+
+    existing = _req("GET", f"/v1/workers/{quote(addr, safe='')}")
+    if existing and existing.get("address"):
+        state["worker_address"] = existing["address"]
+        state["backend_ok"] = True
+        send_heartbeat()
+        log({"event": "registered", "address": state["worker_address"], "mode": "existing"})
+        return
+
     result = _req("POST", "/v1/workers/register", {
-        "operator_pubkey": state["worker_address"] or f"worker_{random.randint(10000,99999)}",
+        "operator_pubkey": addr,
         "role":            ROLE,
         "hardware_tier":   gpu_name,
         "tee_capable":     TEE_CAPABLE,
-        "endpoint":        f"http://localhost:7420",
-        "staked_lock":     0,
+        "is_confidential": TEE_CAPABLE,
+        "endpoint":        f"desktop://{gpu_name.lower().replace(' ', '-')}",
     })
+
     if result and result.get("success"):
         state["worker_address"] = result["address"]
-        state["backend_ok"]     = True
-        log({"event": "registered", "address": state["worker_address"]})
+        state["backend_ok"] = True
+        log({"event": "registered", "address": state["worker_address"], "mode": "new"})
+    elif result and result.get("status") == 409:
+        state["worker_address"] = addr
+        state["backend_ok"] = True
+        send_heartbeat()
+        log({"event": "registered", "address": state["worker_address"], "mode": "409_existing"})
     else:
         state["backend_ok"] = False
-        log({"event": "register_failed", "msg": "backend unreachable — running standalone"})
+        if not state["last_backend_error"]:
+            state["last_backend_error"] = "Could not register with Gridlock"
+        log({"event": "register_failed", "msg": state["last_backend_error"]})
 
 
 def send_heartbeat():
@@ -151,6 +188,17 @@ def send_heartbeat():
         "worker_address": state["worker_address"],
         "goodput_score":  state["tokens_per_sec"],
     })
+
+
+def set_worker_status(status: str):
+    addr = (state["worker_address"] or "").strip()
+    if not addr or not state["backend_ok"]:
+        return
+    result = _req("POST", f"/v1/workers/{quote(addr, safe='')}/status", {"status": status})
+    if result and result.get("ok"):
+        log({"event": "status_updated", "status": status})
+    else:
+        log({"event": "status_update_failed", "status": status, "err": state.get("last_backend_error")})
 
 
 def _ws_url() -> str:
@@ -174,6 +222,30 @@ def _ws_on_message(_ws, message: str):
     if msg.get("type") == "job:new":
         with _ws_job_lock:
             _ws_job_queue.append(msg)
+    elif msg.get("type") == "worker:registered":
+        log({"event": "ws_ready", "address": msg.get("worker_address")})
+    elif msg.get("type") == "error":
+        log({"event": "ws_server_error", "msg": msg.get("message")})
+
+
+def _ws_on_error(_ws, error):
+    log({"event": "ws_error", "err": str(error)})
+
+
+def _ws_on_close(_ws, code, msg):
+    global _active_ws
+    _active_ws = None
+    log({"event": "ws_closed", "code": code, "msg": str(msg) if msg else ""})
+
+
+def _ws_sslopt() -> dict | None:
+    if not _ws_url().startswith("wss://"):
+        return None
+    try:
+        import certifi
+        return {"ca_certs": certifi.where(), "cert_reqs": ssl.CERT_REQUIRED}
+    except ImportError:
+        return {"cert_reqs": ssl.CERT_REQUIRED}
 
 
 def _ws_on_open(ws):
@@ -184,8 +256,8 @@ def _ws_on_open(ws):
     ws.send(json.dumps({
         "type": "worker:register",
         "worker_address": state["worker_address"],
-        "worker_type": "native",
-        "model": "llama-3.1-8b-instant",
+        "worker_type": "desktop",
+        "model": inference.get_active_model(),
         "tok_per_sec": max(state["tokens_per_sec"], 1),
     }))
     log({"event": "ws_registered"})
@@ -201,12 +273,21 @@ def ws_loop():
 
     while state["running"]:
         try:
+            ws_kwargs: dict = {
+                "ping_interval": 30,
+                "ping_timeout": 10,
+            }
+            sslopt = _ws_sslopt()
+            if sslopt:
+                ws_kwargs["sslopt"] = sslopt
             _ws_app = websocket.WebSocketApp(
                 _ws_url(),
                 on_message=_ws_on_message,
                 on_open=_ws_on_open,
+                on_error=_ws_on_error,
+                on_close=_ws_on_close,
             )
-            _ws_app.run_forever(ping_interval=30, ping_timeout=10)
+            _ws_app.run_forever(**ws_kwargs)
         except Exception as e:
             log({"event": "ws_error", "err": str(e)})
         time.sleep(3)
@@ -229,17 +310,21 @@ def fetch_next_job() -> dict | None:
             "model": ws_job.get("model"),
             "messages": ws_job.get("messages", []),
             "sla_tier": ws_job.get("sla_tier", "standard"),
+            "confidential": ws_job.get("confidential", False),
             "output_tokens": ws_job.get("max_tokens", 512),
         }}
-    resp = _req("GET", f"/v1/jobs/next?worker_address={state['worker_address']}")
+    resp = _req("GET", f"/v1/jobs/next?worker_address={quote(state['worker_address'], safe='')}")
     if resp and resp.get("job"):
         return resp
     return None
 
 
-def complete_job_backend(job_id: str, ttft_ms: float, tpot_ms: float, output_tokens: int, response: str = ""):
+def complete_job_backend(job_id: str, ttft_ms: float, tpot_ms: float, output_tokens: int, response: str = "", confidential: bool = False):
     if not state["backend_ok"]:
         return
+    attestation_hash = None
+    if confidential and TEE_CAPABLE:
+        attestation_hash = compute_job_attestation_hash(job_id, state["worker_address"], response)
     body = {
         "job_id":         job_id,
         "worker_address": state["worker_address"],
@@ -248,6 +333,8 @@ def complete_job_backend(job_id: str, ttft_ms: float, tpot_ms: float, output_tok
         "output_tokens":  output_tokens,
         "response":       response,
     }
+    if attestation_hash:
+        body["attestation_hash"] = attestation_hash
     if _active_ws:
         try:
             _active_ws.send(json.dumps({
@@ -259,19 +346,35 @@ def complete_job_backend(job_id: str, ttft_ms: float, tpot_ms: float, output_tok
             pass
     _req("POST", "/v1/jobs/complete", body)
 
+
+def fail_job_backend(job_id: str, error: str):
+    if _active_ws:
+        try:
+            _active_ws.send(json.dumps({
+                "type": "job:error",
+                "job_id": job_id,
+                "error": error,
+            }))
+        except Exception:
+            pass
+
 # ── Heartbeat loop ────────────────────────────────────────────────────────────
 
 def heartbeat_loop():
     while True:
-        time.sleep(30)
+        time.sleep(15 if state["running"] else 30)
         if state["running"]:
             send_heartbeat()
 
 # ── Worker inference loop ─────────────────────────────────────────────────────
 
-TIERS       = ["Nano", "Micro", "Batch", "Realtime"]
-TOKEN_OPTS  = [512, 1024, 2048, 4096]
 PRICE_PER_1M = 8.5
+
+
+def _update_job_progress(generated: int, max_tokens: int):
+    if state["active_job"]:
+        pct = min(99.0, (generated / max(max_tokens, 1)) * 100)
+        state["active_job"]["progress"] = pct
 
 
 def worker_loop():
@@ -279,89 +382,105 @@ def worker_loop():
         resp = fetch_next_job()
         job = resp.get("job") if resp else None
 
-        if job:
-            job_id  = job["id"]
-            tokens  = job.get("output_tokens", random.choice(TOKEN_OPTS))
-            tier    = job.get("sla_tier", "standard")
-            inference_messages = prepare_inference_messages(job.get("messages", []))
-        else:
-            if state["backend_ok"]:
-                time.sleep(1.0)
-                continue
-            # Standalone mock job
-            time.sleep(random.uniform(2.5, 6.0))
-            if not state["running"]:
-                break
-            job_id = f"local_{random.randint(0, 0xFFFFFF):06x}"
-            tokens = random.choice(TOKEN_OPTS)
-            tier   = random.choice(TIERS)
-            inference_messages = []
+        if not job:
+            time.sleep(0.5)
+            continue
 
-        # Spin up GPU metrics
-        state["gpu"]["utilization"]  = random.randint(72, 96)
-        state["gpu"]["vram_used_gb"] = round(random.uniform(14, 22), 1)
-        state["gpu"]["temperature"]  = random.randint(68, 82)
-        state["gpu"]["power_w"]      = random.randint(340, 420)
-        tps = random.randint(2000, 3400)
-        state["tokens_per_sec"] = tps
+        job_id = job["id"]
+        max_tokens = job.get("output_tokens", 512)
+        tier = job.get("sla_tier", "standard")
+        confidential = job.get("confidential", False) or tier == "confidential"
+        inference_messages = prepare_inference_messages(job.get("messages", []))
 
         state["active_job"] = {
-            "id": job_id, "tokens": tokens, "tier": tier, "progress": 0.0,
+            "id": job_id,
+            "tokens": max_tokens,
+            "tier": tier,
+            "progress": 0.0,
             "turns": len(inference_messages),
         }
-        log({"event": "job_start", "id": job_id, "tokens": tokens, "tier": tier, "turns": len(inference_messages)})
+        log({"event": "job_start", "id": job_id, "tokens": max_tokens, "tier": tier})
 
-        # Simulate inference
-        t0       = time.time()
-        progress = 0.0
-        while progress < 100 and state["running"]:
-            progress += random.uniform(4, 16)
-            state["active_job"]["progress"] = min(progress, 100.0)
-            refresh_gpu()
-            time.sleep(0.25)
+        refresh_gpu()
+
+        try:
+            result = inference.run_inference(
+                inference_messages,
+                max_tokens=max_tokens,
+                on_token=lambda n, cap: _update_job_progress(n, cap),
+            )
+        except Exception as e:
+            err = str(e)
+            log({"event": "job_error", "id": job_id, "err": err})
+            fail_job_backend(job_id, err)
+            record = {
+                "id": job_id,
+                "status": "failed",
+                "tokens": 0,
+                "tier": tier,
+                "earn": 0.0,
+                "duration_ms": 0,
+                "ts": time.time(),
+            }
+            state["jobs"].insert(0, record)
+            state["jobs"] = state["jobs"][:100]
+            state["active_job"] = None
+            continue
 
         if not state["running"]:
             break
 
-        elapsed_ms = (time.time() - t0) * 1000
-        ttft_ms    = elapsed_ms * random.uniform(0.1, 0.3)
-        tpot_ms    = elapsed_ms / max(tokens, 1)
-        fail       = random.random() < 0.04
-        earn       = round((tokens / 1_000_000) * PRICE_PER_1M, 4) if not fail else 0.0
+        state["active_job"]["progress"] = 100.0
+        refresh_gpu()
+
+        tokens = result["tokens"]
+        ttft_ms = result["ttft_ms"]
+        tpot_ms = result["tpot_ms"]
+        response_text = result["content"]
+        elapsed_ms = result["duration_ms"]
+        earn = round((tokens / 1_000_000) * PRICE_PER_1M, 4)
+        tps = round(tokens / max(elapsed_ms / 1000, 0.001), 1)
+        state["tokens_per_sec"] = tps
 
         record = {
-            "id":          job_id,
-            "status":      "failed" if fail else "completed",
-            "tokens":      tokens,
-            "tier":        tier,
-            "earn":        earn,
-            "duration_ms": round(elapsed_ms),
-            "ts":          time.time(),
+            "id": job_id,
+            "status": "completed",
+            "tokens": tokens,
+            "tier": tier,
+            "earn": earn,
+            "duration_ms": elapsed_ms,
+            "ts": time.time(),
         }
         state["jobs"].insert(0, record)
         state["jobs"] = state["jobs"][:100]
         state["active_job"] = None
 
-        if not fail:
-            state["earnings"]["today"]  = round(state["earnings"]["today"] + earn, 4)
-            state["earnings"]["week"]   = round(state["earnings"]["week"]  + earn, 4)
-            state["earnings"]["total"]  = round(state["earnings"]["total"] + earn, 4)
-            state["jobs_today"]        += 1
-            complete_job_backend(
-                job_id, ttft_ms, tpot_ms, tokens,
-                response=f"[mock inference over {len(inference_messages)} messages]",
-            )
+        state["earnings"]["today"] = round(state["earnings"]["today"] + earn, 4)
+        state["earnings"]["week"] = round(state["earnings"]["week"] + earn, 4)
+        state["earnings"]["total"] = round(state["earnings"]["total"] + earn, 4)
+        state["jobs_today"] += 1
 
-        log({"event": "job_done", "id": job_id, "status": record["status"], "earn": earn})
+        complete_job_backend(
+            job_id, ttft_ms, tpot_ms, tokens,
+            response=response_text,
+            confidential=confidential,
+        )
+        log({"event": "job_done", "id": job_id, "status": "completed", "earn": earn, "tps": tps})
 
-        # Cool down
-        state["gpu"]["utilization"] = random.randint(5, 20)
-        state["tokens_per_sec"]     = 0
+        if state["running"]:
+            state["tokens_per_sec"] = 0
+            refresh_gpu()
 
 # ── Local HTTP API (for Electron UI) ─────────────────────────────────────────
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *_): pass
+
+    def _read_json(self) -> dict:
+        length = int(self.headers.get("Content-Length", 0))
+        if not length:
+            return {}
+        return json.loads(self.rfile.read(length))
 
     def _json(self, data, code=200):
         body = json.dumps(data).encode()
@@ -375,14 +494,21 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/status":
             self._json({
-                "running":        state["running"],
-                "backend_ok":     state["backend_ok"],
-                "worker_address": state["worker_address"],
-                "gpu":            state["gpu"],
-                "active_job":     state["active_job"],
-                "tokens_per_sec": state["tokens_per_sec"],
-                "jobs_today":     state["jobs_today"],
-                "earnings_today": state["earnings"]["today"],
+                "running":           state["running"],
+                "backend_ok":        state["backend_ok"],
+                "last_backend_error": state["last_backend_error"],
+                "wallet_connected":  bool((state["worker_address"] or "").strip()),
+                "inference_ready":   state["inference_ready"],
+                "inference_error":   state["inference_error"],
+                "inference_backend": state["inference_backend"],
+                "worker_address":    state["worker_address"],
+                "tee_capable":       TEE_CAPABLE,
+                "gpu_detected":      state.get("gpu_detected", False),
+                "gpu":               state["gpu"],
+                "active_job":        state["active_job"],
+                "tokens_per_sec":    state["tokens_per_sec"],
+                "jobs_today":        state["jobs_today"],
+                "earnings_today":    state["earnings"]["today"],
             })
         elif self.path == "/jobs":
             self._json({"jobs": state["jobs"][:30]})
@@ -394,21 +520,78 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         global _worker_thread
         if self.path == "/worker/start":
+            wallet = (state["worker_address"] or "").strip()
+            if len(wallet) < 20:
+                self._json({"ok": False, "error": "wallet_required", "message": "Connect your wallet before starting."}, 400)
+                return
+
+            refresh_gpu()
+            if not state.get("gpu_detected"):
+                self._json({
+                    "ok": False,
+                    "error": "gpu_not_found",
+                    "message": (
+                        "NVIDIA GPU not detected. Install GeForce drivers, then verify in PowerShell: nvidia-smi"
+                    ),
+                }, 503)
+                return
+
+            if not state["backend_ok"]:
+                register_with_backend()
+            if not state["backend_ok"]:
+                detail = state.get("last_backend_error") or "Cannot reach Gridlock network."
+                self._json({
+                    "ok": False,
+                    "error": "backend_unreachable",
+                    "message": detail,
+                }, 503)
+                return
+
+            try:
+                backend = inference.resolve_backend()
+                state["inference_ready"] = True
+                state["inference_error"] = None
+                state["inference_backend"] = backend
+                state["tokens_per_sec"] = inference.run_benchmark()
+                log({"event": "inference_ready", "backend": backend, "tps": state["tokens_per_sec"]})
+            except Exception as e:
+                state["inference_ready"] = False
+                state["inference_error"] = str(e)
+                self._json({"ok": False, "error": "inference_unavailable", "message": str(e)}, 503)
+                return
+
             if not state["running"]:
                 state["running"] = True
+                set_worker_status("Active")
                 send_heartbeat()
                 _worker_thread = threading.Thread(target=worker_loop, daemon=True)
                 _worker_thread.start()
                 threading.Thread(target=ws_loop, daemon=True).start()
-            self._json({"ok": True, "backend_ok": state["backend_ok"]})
+            self._json({"ok": True, "backend_ok": state["backend_ok"], "inference_backend": state["inference_backend"]})
 
         elif self.path == "/worker/stop":
             state["running"]        = False
             state["active_job"]     = None
             state["gpu"]["utilization"] = 0
             state["tokens_per_sec"] = 0
+            set_worker_status("Paused")
             send_heartbeat()
             self._json({"ok": True})
+
+        elif self.path == "/wallet":
+            body = self._read_json()
+            addr = str(body.get("address", "")).strip()
+            if len(addr) < 20:
+                self._json({"ok": False, "error": "invalid_wallet"}, 400)
+                return
+            state["worker_address"] = addr
+            register_with_backend()
+            self._json({
+                "ok": True,
+                "backend_ok": state["backend_ok"],
+                "worker_address": state["worker_address"],
+                "message": state["last_backend_error"] if not state["backend_ok"] else None,
+            })
 
         else:
             self._json({"error": "not found"}, 404)
@@ -425,13 +608,16 @@ if __name__ == "__main__":
     parser.add_argument("--port",    type=int, default=7420)
     parser.add_argument("--backend", default=BACKEND_URL)
     parser.add_argument("--wallet",  default=WALLET_ADDR)
+    parser.add_argument("--tee",     action="store_true", default=TEE_CAPABLE)
     args = parser.parse_args()
 
-    BACKEND_URL              = args.backend
+    BACKEND_URL              = args.backend.rstrip("/")
     state["worker_address"]  = args.wallet or ""
+    TEE_CAPABLE              = args.tee or TEE_CAPABLE
 
     detect_gpu()
-    register_with_backend()
+    if state["worker_address"]:
+        register_with_backend()
 
     # Background heartbeat
     hb = threading.Thread(target=heartbeat_loop, daemon=True)

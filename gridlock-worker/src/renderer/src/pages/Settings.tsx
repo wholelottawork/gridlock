@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { motion } from 'framer-motion'
 
 function Field({ label, sub, children }: { label: string; sub?: string; children: React.ReactNode }) {
@@ -36,6 +36,18 @@ export default function Settings() {
   const [maxVram, setMaxVram] = useState('90')
   const [tier, setTier] = useState('Batch')
   const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    const gl = (window as unknown as { gridlock?: { settings: { load: () => Promise<Record<string, unknown>> } } }).gridlock
+    gl?.settings.load().then((cfg) => {
+      if (typeof cfg.wallet === 'string') setWallet(cfg.wallet)
+      if (typeof cfg.rpcUrl === 'string') setRpcUrl(cfg.rpcUrl)
+      if (typeof cfg.teeMode === 'boolean') setTeeMode(cfg.teeMode)
+      if (typeof cfg.autoStart === 'boolean') setAutoStart(cfg.autoStart)
+      if (typeof cfg.maxVramPct === 'number') setMaxVram(String(cfg.maxVramPct))
+      if (typeof cfg.tier === 'string') setTier(cfg.tier)
+    }).catch(() => {})
+  }, [])
 
   const save = async () => {
     const gl = (window as unknown as { gridlock?: { settings: { save: (cfg: unknown) => Promise<{ ok: boolean }> } } }).gridlock
@@ -92,7 +104,7 @@ export default function Settings() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
           <div>
             <div style={{ fontWeight: 700, fontSize: 12 }}>TEE / Confidential Mode</div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', marginTop: 2 }}>Serve jobs inside a Trusted Execution Environment. Requires Intel TDX or AMD SEV hardware.</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', marginTop: 2 }}>Register as TEE-capable for privacy jobs. Dev mode on consumer GPU; production needs H100 CC.</div>
           </div>
           <Toggle on={teeMode} onToggle={() => setTeeMode(v => !v)} />
         </div>
@@ -113,11 +125,10 @@ export default function Settings() {
           {[
             ['Version', '0.1.0'],
             ['Network', 'Solana Devnet'],
-            ['Daemon port', '7420'],
           ].map(([k, v]) => (
             <div key={k} style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ color: 'var(--text-secondary)', fontWeight: 700 }}>{k}</span>
-              <span className={k === 'Daemon port' ? 'mono' : ''}>{v}</span>
+              <span>{v}</span>
             </div>
           ))}
         </div>

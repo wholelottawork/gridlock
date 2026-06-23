@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, shell } from 'electron'
 import { join } from 'path'
 import { spawn, ChildProcess } from 'child_process'
+import { loadSettings, saveSettings, GRIDLOCK_API_URL, type WorkerSettings } from './settings.js'
 
 const isDev = !app.isPackaged
 let mainWindow: BrowserWindow | null = null
@@ -52,16 +53,41 @@ function createTray(): void {
   tray.on('double-click', () => { mainWindow?.show(); mainWindow?.focus() })
 }
 
-function startDaemon(): void {
+function stopDaemon(): void {
+  if (!daemon) return
+  daemon.kill()
+  daemon = null
+}
+
+function startDaemon(settings = loadSettings()): void {
+  stopDaemon()
+
   const pythonScript = isDev
     ? join(process.cwd(), 'python', 'daemon.py')
     : join(process.resourcesPath, 'python', 'daemon.py')
 
   const pythonBin = process.platform === 'win32' ? 'python' : 'python3'
+  const args = [
+    pythonScript,
+    '--port', String(DAEMON_PORT),
+    '--backend', GRIDLOCK_API_URL,
+  ]
+  if (settings.wallet.trim()) {
+    args.push('--wallet', settings.wallet.trim())
+  }
+  if (settings.teeMode) {
+    args.push('--tee')
+  }
 
   try {
-    daemon = spawn(pythonBin, [pythonScript, '--port', String(DAEMON_PORT)], {
-      stdio: ['pipe', 'pipe', 'pipe']
+    daemon = spawn(pythonBin, args, {
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        GRIDLOCK_BACKEND_URL: GRIDLOCK_API_URL,
+        GRIDLOCK_WALLET: settings.wallet,
+        GRIDLOCK_TEE: settings.teeMode ? 'true' : 'false',
+      },
     })
 
     daemon.stdout?.on('data', (buf: Buffer) => {
@@ -93,13 +119,44 @@ async function fetchDaemon(path: string, method = 'GET'): Promise<unknown> {
   return res.json()
 }
 
+function isValidWallet(wallet: string): boolean {
+  const w = wallet.trim()
+  return w.length >= 32 && w.length <= 64
+}
+
 // IPC
 ipcMain.handle('daemon:status', () => fetchDaemon('/status').catch(() => ({ running: false, gpu: null })))
-ipcMain.handle('worker:start',   () => fetchDaemon('/worker/start', 'POST').catch(() => ({ ok: false })))
+ipcMain.handle('worker:start', async () => {
+  const settings = loadSettings()
+  if (!isValidWallet(settings.wallet)) {
+    return { ok: false, error: 'wallet_required', message: 'Connect your wallet before starting.' }
+  }
+  return fetchDaemon('/worker/start', 'POST').catch(() => ({ ok: false, error: 'daemon_unreachable' }))
+})
 ipcMain.handle('worker:stop',    () => fetchDaemon('/worker/stop', 'POST').catch(() => ({ ok: false })))
 ipcMain.handle('worker:jobs',    () => fetchDaemon('/jobs').catch(() => ({ jobs: [] })))
 ipcMain.handle('worker:earnings',() => fetchDaemon('/earnings').catch(() => ({ today: 0, week: 0, total: 0, history: [] })))
-ipcMain.handle('settings:save',  (_e, cfg: unknown) => { console.log('[settings]', cfg); return { ok: true } })
+ipcMain.handle('settings:load', () => loadSettings())
+async function syncWalletToDaemon(wallet: string): Promise<boolean> {
+  if (!isValidWallet(wallet)) return false
+  try {
+    const res = await fetch(`http://127.0.0.1:${DAEMON_PORT}/wallet`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ address: wallet.trim() }),
+    })
+    return res.ok
+  } catch {
+    return false
+  }
+}
+
+ipcMain.handle('settings:save', async (_e, cfg: WorkerSettings) => {
+  saveSettings(cfg)
+  const synced = await syncWalletToDaemon(cfg.wallet)
+  if (!synced) startDaemon(cfg)
+  return { ok: true }
+})
 
 ipcMain.handle('window:minimize', () => mainWindow?.minimize())
 ipcMain.handle('window:maximize', () => mainWindow?.isMaximized() ? mainWindow.restore() : mainWindow?.maximize())
@@ -111,6 +168,5 @@ app.whenReady().then(() => {
   startDaemon()
 })
 
-// Keep app alive in tray when all windows closed
 app.on('window-all-closed', (e: Event) => e.preventDefault())
-app.on('before-quit', () => { daemon?.kill(); daemon = null })
+app.on('before-quit', () => { stopDaemon() })

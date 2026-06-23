@@ -36,7 +36,13 @@ workerRoutes.get("/v1/workers/:address", (c) => {
     .filter((j) => j.worker_address === address)
     .slice(-20)
     .reverse();
-  return c.json({ ...worker, recent_jobs: recent });
+  const conn = workerHub.getConnectionInfo(address);
+  return c.json({
+    ...worker,
+    ...conn,
+    recent_jobs: recent,
+    in_flight: workerHub.inFlightCount(address),
+  });
 });
 
 workerRoutes.post("/v1/workers/register", async (c) => {

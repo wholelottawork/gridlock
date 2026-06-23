@@ -34,6 +34,19 @@ function dashNum(value: number | null | undefined, digits = 2): string {
   return value.toFixed(digits);
 }
 
+function remoteRuntimeFromHeartbeat(
+  worker: ApiWorker | null | undefined,
+  workerStatus: WorkerState,
+  wsOnline: boolean,
+): { online: boolean; kind: "desktop" | "native" | null } {
+  if (wsOnline || !worker || workerStatus !== "Active") return { online: false, kind: null };
+  const ageSec = Date.now() / 1000 - (worker.last_heartbeat ?? 0);
+  if (ageSec > 45) return { online: false, kind: null };
+  if (worker.endpoint?.startsWith("desktop://")) return { online: true, kind: "desktop" };
+  if (worker.endpoint?.startsWith("native://")) return { online: true, kind: "native" };
+  return { online: false, kind: null };
+}
+
 export function WorkerDashboard() {
   const { publicKey, connected } = useWallet();
   const browserWorker = useBrowserWorker();
@@ -167,6 +180,17 @@ export function WorkerDashboard() {
 
   const statusColor = status === "Active" ? "var(--green)" : status === "Stopping" ? "var(--yellow)" : "var(--text-secondary)";
   const hasData = !!workerData;
+  const wsOnline = Boolean(workerData?.ws_online);
+  const browserOnline = browserWorker.status !== "offline" && browserWorker.socketConnected;
+  const remoteRuntime = remoteRuntimeFromHeartbeat(workerData, status, wsOnline);
+  const runtimeOnline = wsOnline || browserOnline || remoteRuntime.online;
+  const runtimeLabel = wsOnline
+    ? `${workerData?.ws_worker_type ?? "worker"} connected${workerData?.ws_busy ? " · computing" : ""}`
+    : browserOnline
+      ? "browser worker connected"
+      : remoteRuntime.online
+        ? `${remoteRuntime.kind} app running`
+        : null;
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.4 }}>
@@ -200,8 +224,23 @@ export function WorkerDashboard() {
                 {workerData.hardware_tier}
                 <span style={{ margin: "0 8px", color: "var(--border-2)" }}>·</span>
                 {workerData.role}
-                <span style={{ margin: "0 8px", color: "var(--border-2)" }}>·</span>
-                <span style={{ color: "var(--green)", fontSize: 11, fontWeight: 700 }}>LIVE</span>
+                {runtimeOnline && (
+                  <>
+                    <span style={{ margin: "0 8px", color: "var(--border-2)" }}>·</span>
+                    <span style={{ color: "var(--green)", fontSize: 11, fontWeight: 700 }}>ONLINE</span>
+                    {runtimeLabel && (
+                      <span style={{ marginLeft: 6, fontSize: 10, color: "var(--text-muted)", fontWeight: 700 }}>
+                        ({runtimeLabel})
+                      </span>
+                    )}
+                  </>
+                )}
+                {hasData && status === "Active" && !runtimeOnline && (
+                  <>
+                    <span style={{ margin: "0 8px", color: "var(--border-2)" }}>·</span>
+                    <span style={{ color: "var(--orange)", fontSize: 11, fontWeight: 700 }}>NO WORKER CONNECTED</span>
+                  </>
+                )}
               </>
             )}
           </div>
@@ -253,10 +292,46 @@ export function WorkerDashboard() {
                 <div style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "center", fontWeight: 700 }}>
                   {status === "Active" && "Stops all workers connected to your wallet"}
                   {status === "Stopping" && "Your current job will finish, then all workers pause"}
-                  {status === "Paused" && "Not accepting new requests — restart browser worker on Start Earning to go live"}
+                  {status === "Paused" && "Not accepting new requests — start desktop, native, or browser worker to go live"}
                 </div>
               )}
             </div>
+
+            {hasData && (
+              <div style={{
+                padding: "10px 12px",
+                borderRadius: 6,
+                background: runtimeOnline ? "rgba(0,200,100,0.08)" : "var(--bg-3)",
+                border: `1px solid ${runtimeOnline ? "rgba(0,200,100,0.25)" : "var(--border)"}`,
+              }}>
+                <div style={{ fontSize: 11, fontWeight: 800, color: runtimeOnline ? "var(--green)" : "var(--text-muted)", marginBottom: 4 }}>
+                  {runtimeOnline ? "WORKER RUNTIME ONLINE" : "NO WORKER RUNTIME"}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.5 }}>
+                  {wsOnline && (
+                    <div>
+                      {workerData.ws_worker_type === "desktop" ? "Desktop app" : workerData.ws_worker_type ?? "Worker"}
+                      : connected
+                      {workerData.ws_model ? ` · ${workerData.ws_model}` : ""}
+                      {workerData.ws_tok_per_sec ? ` · ${Math.round(workerData.ws_tok_per_sec)} tok/s` : ""}
+                    </div>
+                  )}
+                  {!wsOnline && remoteRuntime.online && remoteRuntime.kind === "desktop" && (
+                    <div>Desktop app: running (syncing…)</div>
+                  )}
+                  {!wsOnline && remoteRuntime.online && remoteRuntime.kind === "native" && (
+                    <div>Native worker: running (syncing…)</div>
+                  )}
+                  {browserOnline && <div>Browser worker: connected via WebGPU</div>}
+                  {!runtimeOnline && status === "Active" && (
+                    <div>Start Gridlock Worker (desktop) or browser worker with this same wallet.</div>
+                  )}
+                  {!runtimeOnline && status !== "Active" && (
+                    <div>Resume status above, then start a worker client.</div>
+                  )}
+                </div>
+              </div>
+            )}
 
             <div style={{
               display: "flex", alignItems: "center", justifyContent: "space-between",

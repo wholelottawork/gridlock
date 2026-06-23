@@ -4,34 +4,33 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 
 type DayData = { day: string; earn: number; jobs: number }
 
-function mockHistory(): DayData[] {
-  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-  return days.map((day, i) => ({
-    day,
-    earn: +(4 + Math.random() * 18 + (i === 6 ? -8 : 0)).toFixed(2),
-    jobs: Math.floor(60 + Math.random() * 120)
-  }))
-}
-
 export default function Earnings() {
-  const [history, setHistory] = useState<DayData[]>(mockHistory)
-  const [total, setTotal] = useState(142.38)
-  const [staked, setStaked] = useState(50_000)
+  const [history, setHistory] = useState<DayData[]>([])
+  const [total, setTotal] = useState(0)
+  const [today, setToday] = useState(0)
+  const [week, setWeek] = useState(0)
+  const [staked, setStaked] = useState(0)
   const [pendingUnstake, setPendingUnstake] = useState(0)
 
   useEffect(() => {
     const gl = (window as unknown as { gridlock?: { worker: { earnings: () => Promise<{ today: number; week: number; total: number; history: DayData[] }> } } }).gridlock
     if (!gl) return
-    gl.worker.earnings().then(r => {
-      if (r.total) setTotal(r.total)
-      if (r.history?.length) setHistory(r.history)
-    }).catch(() => {})
+    const poll = () => {
+      gl.worker.earnings().then(r => {
+        setTotal(r.total ?? 0)
+        setToday(r.today ?? 0)
+        setWeek(r.week ?? 0)
+        if (r.history?.length) setHistory(r.history)
+      }).catch(() => {})
+    }
+    poll()
+    const iv = setInterval(poll, 5000)
+    return () => clearInterval(iv)
   }, [])
 
-  const todayEarn = history[history.length - 1]?.earn ?? 0
-  const weekEarn  = history.reduce((s, d) => s + d.earn, 0)
-  const apyDaily  = (staked * 0.08) / 365
-  const maxBar    = Math.max(...history.map(d => d.earn))
+  const weekEarn = week || history.reduce((s, d) => s + d.earn, 0)
+  const apyDaily  = staked > 0 ? (staked * 0.08) / 365 : 0
+  const maxBar    = history.length ? Math.max(...history.map(d => d.earn)) : 0
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.25 }}>
@@ -40,10 +39,10 @@ export default function Earnings() {
       {/* Top stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 10, marginBottom: 20 }}>
         {[
-          { label: 'TODAY',     val: `${todayEarn.toFixed(2)} $LOCK`,    sub: 'earned' },
-          { label: 'THIS WEEK', val: `${weekEarn.toFixed(2)} $LOCK`,     sub: 'earned' },
-          { label: 'ALL TIME',  val: `${total.toFixed(2)} $LOCK`,         sub: 'total' },
-          { label: 'STAKED',    val: `${staked.toLocaleString()} $LOCK`,  sub: '8% APY' },
+          { label: 'TODAY',     val: `${today.toFixed(4)} $LOCK`,    sub: 'earned' },
+          { label: 'THIS WEEK', val: `${weekEarn.toFixed(4)} $LOCK`,     sub: 'earned' },
+          { label: 'ALL TIME',  val: `${total.toFixed(4)} $LOCK`,         sub: 'total' },
+          { label: 'STAKED',    val: staked > 0 ? `${staked.toLocaleString()} $LOCK` : '—',  sub: staked > 0 ? '8% APY' : 'not staked' },
         ].map(s => (
           <div key={s.label} className="card" style={{ padding: '11px 13px' }}>
             <div style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '1.2px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 7 }}>{s.label}</div>
@@ -54,6 +53,7 @@ export default function Earnings() {
       </div>
 
       {/* Bar chart */}
+      {history.length > 0 && (
       <div className="card" style={{ marginBottom: 14 }}>
         <div style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '1.2px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 14 }}>DAILY EARNINGS — LAST 7 DAYS</div>
         <ResponsiveContainer width="100%" height={130}>
@@ -88,6 +88,7 @@ export default function Earnings() {
           </BarChart>
         </ResponsiveContainer>
       </div>
+      )}
 
       {/* Staking */}
       <div className="card" style={{ marginBottom: 14 }}>

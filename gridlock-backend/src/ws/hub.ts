@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { workersRegistry } from "../state.js";
 import type { Message } from "../types.js";
 
-export type WorkerConnectionType = "browser" | "native";
+export type WorkerConnectionType = "browser" | "native" | "desktop";
 
 export interface WsWorkerSession {
   address: string;
@@ -330,6 +330,32 @@ class WorkerHub {
 
   isConnected(address: string): boolean {
     return this.sessions.has(address);
+  }
+
+  getConnectionInfo(address: string): {
+    ws_online: boolean;
+    ws_worker_type: WorkerConnectionType | null;
+    ws_busy: boolean;
+    ws_model: string | null;
+    ws_tok_per_sec: number;
+  } {
+    const session = this.sessions.get(address);
+    if (!session) {
+      return {
+        ws_online: false,
+        ws_worker_type: null,
+        ws_busy: false,
+        ws_model: null,
+        ws_tok_per_sec: 0,
+      };
+    }
+    return {
+      ws_online: true,
+      ws_worker_type: session.type,
+      ws_busy: session.status === "busy",
+      ws_model: session.model,
+      ws_tok_per_sec: session.tokPerSec,
+    };
   }
 
   dispatchToWorker(address: string, payload: DispatchJobPayload): Promise<JobResult> {

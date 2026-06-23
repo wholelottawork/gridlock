@@ -16,9 +16,10 @@ type JobHandler = (jobId: string, messages: WsJobMessage[], model: string) => vo
 type StatsListener = (stats: WsNetworkStats | null) => void;
 type ConnectedListener = (connected: boolean) => void;
 
+import { resolveApiBaseUrl } from "./api-client";
+
 function wsBaseUrl(): string {
-  const api = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
-  return api.replace(/^http/, "ws") + "/v1/ws";
+  return resolveApiBaseUrl().replace(/^http/, "ws") + "/v1/ws";
 }
 
 function safeSend(ws: WebSocket | null, data: Record<string, unknown>) {

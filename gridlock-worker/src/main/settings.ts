@@ -1,0 +1,46 @@
+import { app } from 'electron'
+import fs from 'fs'
+import path from 'path'
+
+/** Production Gridlock router — not user-configurable. Dev override: GRIDLOCK_BACKEND_URL env. */
+export const GRIDLOCK_API_URL = (
+  process.env.GRIDLOCK_BACKEND_URL ?? 'https://api.reacton.dev'
+).replace(/\/$/, '')
+
+export interface WorkerSettings {
+  wallet: string
+  rpcUrl: string
+  teeMode: boolean
+  autoStart: boolean
+  maxVramPct: number
+  tier: string
+}
+
+const DEFAULTS: WorkerSettings = {
+  wallet: '',
+  rpcUrl: 'https://api.devnet.solana.com',
+  teeMode: false,
+  autoStart: false,
+  maxVramPct: 90,
+  tier: 'Batch',
+}
+
+function settingsPath(): string {
+  return path.join(app.getPath('userData'), 'settings.json')
+}
+
+export function loadSettings(): WorkerSettings {
+  try {
+    const raw = fs.readFileSync(settingsPath(), 'utf8')
+    const parsed = JSON.parse(raw) as Partial<WorkerSettings & { backendUrl?: string }>
+    delete parsed.backendUrl
+    return { ...DEFAULTS, ...parsed }
+  } catch {
+    return { ...DEFAULTS }
+  }
+}
+
+export function saveSettings(settings: WorkerSettings): void {
+  fs.mkdirSync(path.dirname(settingsPath()), { recursive: true })
+  fs.writeFileSync(settingsPath(), JSON.stringify(settings, null, 2))
+}
