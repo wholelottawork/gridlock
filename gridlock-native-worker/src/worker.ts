@@ -12,11 +12,24 @@ import {
 import { computeJobAttestationHash } from "./attestation.js";
 import type { InferenceBackend } from "./config.js";
 
+/** Keep REST heartbeat under backend AutoGate threshold (120s). */
+const HEARTBEAT_INTERVAL_MS = 15_000;
+/** WebSocket protocol + app pings — proxies (e.g. Cloudflare) drop idle sockets ~100–120s. */
+const WS_PING_INTERVAL_MS = 25_000;
+const RECONNECT_DELAY_MS = 3_000;
+
 interface WorkerOptions {
   wallet: string;
   backendUrl: string;
   benchmarkOnly?: boolean;
   inference?: InferenceBackend;
+}
+
+interface SessionContext {
+  wallet: string;
+  backendUrl: string;
+  modelName: string;
+  tokPerSec: number;
 }
 
 async function apiPost<T>(base: string, path: string, body: unknown): Promise<T> {
@@ -32,13 +45,15 @@ async function apiPost<T>(base: string, path: string, body: unknown): Promise<T>
   return res.json() as Promise<T>;
 }
 
+async function sendHeartbeat(wallet: string, backendUrl: string): Promise<void> {
+  await apiPost(backendUrl, "/v1/workers/heartbeat", { worker_address: wallet });
+}
+
 async function ensureRegistered(wallet: string, backendUrl: string, hardwareTier: string) {
   try {
     const res = await fetch(`${backendUrl.replace(/\/$/, "")}/v1/workers/${wallet}`);
     if (res.ok) {
-      await apiPost(backendUrl, "/v1/workers/heartbeat", {
-        worker_address: wallet,
-      });
+      await sendHeartbeat(wallet, backendUrl);
       return;
     }
   } catch {
@@ -59,31 +74,24 @@ function log(msg: string) {
   console.log(`[${new Date().toISOString()}] ${msg}`);
 }
 
-export async function startWorker(options: WorkerOptions): Promise<void> {
-  const { wallet, backendUrl, benchmarkOnly, inference } = options;
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
-  printStartupBanner();
-
-  const hardwareTier = await detectGpuName();
-  log(`Wallet: ${wallet.slice(0, 8)}…`);
-  log(`API: ${backendUrl}`);
-  log(`GPU: ${hardwareTier}`);
-
-  const backend = await resolveInferenceBackend(inference);
-  log(`Inference: ${backend} (${getActiveModel()})`);
-
-  log("Running benchmark…");
-  const tokPerSec = await runBenchmark();
-  log(`Benchmark: ${tokPerSec} tok/s`);
-
-  if (benchmarkOnly) return;
-
-  await ensureRegistered(wallet, backendUrl, hardwareTier);
-
+function runWebSocketSession(ctx: SessionContext): Promise<void> {
+  const { wallet, backendUrl, modelName, tokPerSec } = ctx;
   let activeJob: string | null = null;
-  const modelName = getActiveModel();
+  let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  let pingTimer: ReturnType<typeof setInterval> | null = null;
 
-  await new Promise<void>((resolve, reject) => {
+  const cleanup = () => {
+    if (heartbeatTimer) clearInterval(heartbeatTimer);
+    if (pingTimer) clearInterval(pingTimer);
+    heartbeatTimer = null;
+    pingTimer = null;
+  };
+
+  return new Promise((resolve) => {
     const ws = new WebSocket(wsUrl(backendUrl));
 
     ws.on("open", () => {
@@ -98,6 +106,22 @@ export async function startWorker(options: WorkerOptions): Promise<void> {
         }),
       );
       log("Registered for jobs");
+
+      void sendHeartbeat(wallet, backendUrl).catch((e) => {
+        log(`Heartbeat failed: ${e instanceof Error ? e.message : String(e)}`);
+      });
+
+      heartbeatTimer = setInterval(() => {
+        void sendHeartbeat(wallet, backendUrl).catch((e) => {
+          log(`Heartbeat failed: ${e instanceof Error ? e.message : String(e)}`);
+        });
+      }, HEARTBEAT_INTERVAL_MS);
+
+      pingTimer = setInterval(() => {
+        if (ws.readyState !== WebSocket.OPEN) return;
+        ws.ping();
+        ws.send(JSON.stringify({ type: "ping" }));
+      }, WS_PING_INTERVAL_MS);
     });
 
     ws.on("message", (raw) => {
@@ -106,6 +130,9 @@ export async function startWorker(options: WorkerOptions): Promise<void> {
           const msg = JSON.parse(String(raw)) as Record<string, unknown>;
           if (msg.type === "error") {
             log(`Error: ${String(msg.message ?? "unknown")}`);
+            return;
+          }
+          if (msg.type === "pong" || msg.type === "connected" || msg.type === "worker:registered") {
             return;
           }
           if (msg.type !== "job:new" || activeJob) return;
@@ -152,12 +179,61 @@ export async function startWorker(options: WorkerOptions): Promise<void> {
     });
 
     ws.on("close", () => {
+      cleanup();
       log("Disconnected");
       resolve();
     });
 
     ws.on("error", (err) => {
-      reject(err);
+      log(`WebSocket error: ${err.message}`);
     });
   });
+}
+
+export async function startWorker(options: WorkerOptions): Promise<void> {
+  const { wallet, backendUrl, benchmarkOnly, inference } = options;
+
+  printStartupBanner();
+
+  const hardwareTier = await detectGpuName();
+  log(`Wallet: ${wallet.slice(0, 8)}…`);
+  log(`API: ${backendUrl}`);
+  log(`GPU: ${hardwareTier}`);
+
+  const backend = await resolveInferenceBackend(inference);
+  log(`Inference: ${backend} (${getActiveModel()})`);
+
+  log("Running benchmark…");
+  const tokPerSec = await runBenchmark();
+  log(`Benchmark: ${tokPerSec} tok/s`);
+
+  if (benchmarkOnly) return;
+
+  await ensureRegistered(wallet, backendUrl, hardwareTier);
+
+  const session: SessionContext = {
+    wallet,
+    backendUrl,
+    modelName: getActiveModel(),
+    tokPerSec,
+  };
+
+  let running = true;
+  const shutdown = () => {
+    running = false;
+    log("Shutting down…");
+  };
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
+
+  while (running) {
+    try {
+      await runWebSocketSession(session);
+    } catch (e) {
+      log(`Session error: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    if (!running) break;
+    log(`Reconnecting in ${RECONNECT_DELAY_MS / 1000}s…`);
+    await sleep(RECONNECT_DELAY_MS);
+  }
 }
