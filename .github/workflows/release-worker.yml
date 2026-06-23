@@ -1,8 +1,8 @@
-# Build Gridlock Worker (.exe) and attach to a GitHub Release.
+# Build Gridlock Worker for Windows, macOS, and Linux; attach to one GitHub Release.
 #
-# Trigger: push a tag like worker-v0.1.0
-#   git tag worker-v0.1.0
-#   git push origin worker-v0.1.0
+# Trigger: push a tag like worker-v0.1.1
+#   git tag worker-v0.1.1
+#   git push origin worker-v0.1.1
 #
 # Or: Actions → Release Gridlock Worker → Run workflow (creates a draft release).
 
@@ -15,9 +15,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag (e.g. worker-v0.1.0)"
+        description: "Release tag (e.g. worker-v0.1.1)"
         required: true
-        default: "worker-v0.1.0"
+        default: "worker-v0.1.1"
 
 permissions:
   contents: write
@@ -46,23 +46,20 @@ jobs:
       - name: Install Python icon deps
         run: pip install pillow
 
-      - name: Build installer
+      - name: Build Windows installer
         shell: pwsh
         env:
           CSC_LINK_B64: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
         run: |
-          # Sign only when CSC_LINK secret is configured (base64-encoded .pfx).
-          # Otherwise build unsigned — do not set CSC_IDENTITY_AUTO_DISCOVERY=false
-          # without a cert, or electron-builder fails.
           if ($env:CSC_LINK_B64) {
             $pfx = Join-Path $env:RUNNER_TEMP "codesign.pfx"
             [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:CSC_LINK_B64))
             $env:CSC_LINK = $pfx
           }
-          npm run package
+          npm run package -- --win
 
-      - name: Upload artifact
+      - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: gridlock-worker-windows
@@ -70,11 +67,96 @@ jobs:
             gridlock-worker/release/Gridlock-Worker-Setup-*.exe
             gridlock-worker/release/latest.yml
 
+  build-macos:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: gridlock-worker
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: gridlock-worker/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Python icon deps
+        run: pip3 install pillow
+
+      - name: Build macOS DMG
+        run: npm run package -- --mac --universal
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gridlock-worker-macos
+          path: gridlock-worker/release/Gridlock-Worker-*.dmg
+
+  build-linux:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: gridlock-worker
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: gridlock-worker/package-lock.json
+
+      - name: Install AppImage dependencies
+        run: sudo apt-get update && sudo apt-get install -y libfuse2 fuse3
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Python icon deps
+        run: pip3 install pillow
+
+      - name: Build Linux AppImage
+        run: npm run package -- --linux
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gridlock-worker-linux
+          path: gridlock-worker/release/Gridlock-Worker-*.AppImage
+
+  release:
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download all platform artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List release files
+        run: find artifacts -type f | sort
+
       - name: Publish GitHub Release (tag push)
         if: startsWith(github.ref, 'refs/tags/worker-v')
         uses: softprops/action-gh-release@v2
         with:
-          files: gridlock-worker/release/Gridlock-Worker-Setup-*.exe
+          files: |
+            artifacts/**/*.exe
+            artifacts/**/*.dmg
+            artifacts/**/*.AppImage
+            artifacts/**/latest.yml
           generate_release_notes: true
           draft: false
 
@@ -84,6 +166,10 @@ jobs:
         with:
           tag_name: ${{ github.event.inputs.tag }}
           name: Gridlock Worker ${{ github.event.inputs.tag }}
-          files: gridlock-worker/release/Gridlock-Worker-Setup-*.exe
+          files: |
+            artifacts/**/*.exe
+            artifacts/**/*.dmg
+            artifacts/**/*.AppImage
+            artifacts/**/latest.yml
           generate_release_notes: true
           draft: true

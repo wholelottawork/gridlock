@@ -15,7 +15,7 @@
   "build": {
     "appId": "network.gridlock.worker",
     "productName": "Gridlock Worker",
-    "icon": "build/icon.ico",
+    "icon": "build/icon.png",
     "directories": {
       "output": "release"
     },
@@ -31,11 +31,15 @@
     },
     "mac": {
       "target": "dmg",
-      "artifactName": "Gridlock-Worker-${version}.${ext}"
+      "icon": "build/icon.png",
+      "artifactName": "Gridlock-Worker-${version}.${ext}",
+      "category": "public.app-category.developer-tools"
     },
     "linux": {
       "target": "AppImage",
-      "artifactName": "Gridlock-Worker-${version}.${ext}"
+      "icon": "build/icon.png",
+      "artifactName": "Gridlock-Worker-${version}.${ext}",
+      "category": "Development"
     },
     "extraResources": [
       {
