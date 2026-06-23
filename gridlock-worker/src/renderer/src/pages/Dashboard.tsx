@@ -149,6 +149,7 @@ export default function Dashboard() {
   const [walletInput, setWalletInput] = useState('')
   const [walletSaving, setWalletSaving] = useState(false)
   const [startError, setStartError] = useState<string | null>(null)
+  const [toggleBusy, setToggleBusy] = useState<'starting' | 'stopping' | null>(null)
   const [gpuDetected, setGpuDetected] = useState(false)
   const [effectiveCompute, setEffectiveCompute] = useState<'cpu' | 'gpu'>('gpu')
   const [cpu, setCpu] = useState<CPU>(EMPTY_CPU)
@@ -185,6 +186,11 @@ export default function Dashboard() {
         setGpuDetected(Boolean(s.gpu_detected ?? s.gpu?.detected))
         setEffectiveCompute(s.effective_compute === 'cpu' ? 'cpu' : 'gpu')
         setWorkerOn(s.running)
+        setToggleBusy(prev => {
+          if (prev === 'starting' && s.running) return null
+          if (prev === 'stopping' && !s.running) return null
+          return prev
+        })
         setBackendOk(Boolean(s.backend_ok))
         setInferenceBackend(s.inference_backend ?? null)
         if (s.worker_address && isValidWallet(s.worker_address)) {
@@ -231,37 +237,66 @@ export default function Dashboard() {
 
   const toggle = useCallback(async () => {
     const api = gl()
+    if (toggleBusy) return
+
     if (!workerOn) {
       if (!walletConnected) {
         setStartError('Connect your wallet before starting.')
         return
       }
       setStartError(null)
+      setToggleBusy('starting')
       try {
         const res = await api?.worker.start()
         if (!res?.ok) {
           setStartError(res?.message ?? 'Could not start worker.')
+          setToggleBusy(null)
           return
         }
         setWorkerOn(true)
+        setToggleBusy(null)
       } catch {
         setStartError('Worker daemon not responding.')
+        setToggleBusy(null)
       }
     } else {
-      try { await api?.worker.stop() } catch {}
-      setWorkerOn(false)
-      setActiveJob(null)
+      setToggleBusy('stopping')
       setStartError(null)
+      try {
+        await api?.worker.stop()
+        setWorkerOn(false)
+        setActiveJob(null)
+      } catch {
+        setStartError('Could not stop worker.')
+      } finally {
+        setToggleBusy(null)
+      }
     }
-  }, [workerOn, walletConnected])
+  }, [workerOn, walletConnected, toggleBusy])
 
   const usingCpu = effectiveCompute === 'cpu' || gpu.vendor === 'cpu'
   const computeReady = usingCpu ? Boolean(cpu.detected) : gpuDetected
   const canStartWorker = walletConnected && computeReady
 
   const vramPct = gpu.vram_total_gb > 0 ? (gpu.vram_used_gb / gpu.vram_total_gb) * 100 : 0
-  const statusLabel = activeJob ? 'COMPUTING' : workerOn ? 'IDLE' : 'OFFLINE'
-  const statusDotColor = workerOn ? 'var(--text-primary)' : 'var(--text-muted)'
+  const isBusy = toggleBusy !== null
+  const statusLabel = toggleBusy === 'starting'
+    ? 'STARTING'
+    : toggleBusy === 'stopping'
+      ? 'STOPPING'
+      : activeJob
+        ? 'COMPUTING'
+        : workerOn
+          ? 'IDLE'
+          : 'OFFLINE'
+  const statusDotColor = workerOn || toggleBusy === 'starting' ? 'var(--text-primary)' : 'var(--text-muted)'
+  const buttonLabel = toggleBusy === 'starting'
+    ? 'STARTING…'
+    : toggleBusy === 'stopping'
+      ? 'STOPPING…'
+      : workerOn
+        ? 'STOP'
+        : 'START WORKER'
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.22 }}>
@@ -271,8 +306,13 @@ export default function Dashboard() {
         <div>
           <div style={{ fontSize: 18, fontWeight: 900, letterSpacing: '-0.2px', marginBottom: 4 }}>Dashboard</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-            <span className={workerOn ? 'pulse-dot' : ''} style={{ display: 'inline-block', width: 5, height: 5, borderRadius: '50%', background: statusDotColor }} />
-            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '1px', color: 'var(--text-muted)' }}>{statusLabel}</span>
+            <span className={workerOn || toggleBusy === 'starting' ? 'pulse-dot' : ''} style={{ display: 'inline-block', width: 5, height: 5, borderRadius: '50%', background: statusDotColor }} />
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: '1px', color: toggleBusy ? 'var(--text-primary)' : 'var(--text-muted)' }}>{statusLabel}</span>
+            {toggleBusy === 'starting' && (
+              <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--text-muted)' }}>
+                · checking Ollama & Gridlock…
+              </span>
+            )}
             {walletConnected && (
               <span style={{ fontSize: 10, fontWeight: 700, color: backendOk ? 'var(--success)' : 'var(--text-muted)' }}>
                 · Gridlock {backendOk ? 'connected' : 'pending'}
@@ -286,18 +326,36 @@ export default function Dashboard() {
           </div>
         </div>
         <button
-          onClick={toggle}
-          disabled={!workerOn && !canStartWorker}
+          type="button"
+          onClick={() => void toggle()}
+          disabled={isBusy || (!workerOn && !canStartWorker)}
+          className={isBusy ? 'btn-busy' : undefined}
           style={{
             padding: '8px 22px', borderRadius: 6, fontWeight: 800, fontSize: 11, letterSpacing: '0.8px',
-            background: workerOn ? 'var(--accent-dim)' : canStartWorker ? 'var(--text-primary)' : 'var(--bg-4)',
-            color: workerOn ? 'var(--text-primary)' : canStartWorker ? '#000000' : 'var(--text-muted)',
-            border: workerOn ? '1px solid var(--border-2)' : '1px solid var(--border-2)',
-            cursor: !workerOn && !canStartWorker ? 'not-allowed' : 'pointer',
-            transition: 'all 0.15s', flexShrink: 0, opacity: !workerOn && !canStartWorker ? 0.55 : 1,
+            minWidth: 132, textAlign: 'center',
+            background: isBusy
+              ? 'var(--accent-mid)'
+              : workerOn
+                ? 'var(--accent-dim)'
+                : canStartWorker
+                  ? 'var(--text-primary)'
+                  : 'var(--bg-4)',
+            color: isBusy
+              ? 'var(--text-primary)'
+              : workerOn
+                ? 'var(--text-primary)'
+                : canStartWorker
+                  ? '#000000'
+                  : 'var(--text-muted)',
+            border: '1px solid var(--border-2)',
+            cursor: isBusy || (!workerOn && !canStartWorker) ? 'not-allowed' : 'pointer',
+            transition: 'background 0.15s, color 0.15s, transform 0.08s',
+            flexShrink: 0,
+            opacity: !isBusy && !workerOn && !canStartWorker ? 0.55 : 1,
+            transform: isBusy ? 'scale(0.98)' : undefined,
           }}
         >
-          {workerOn ? 'STOP' : 'START WORKER'}
+          {buttonLabel}
         </button>
       </div>
 

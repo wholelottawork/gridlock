@@ -85,3 +85,12 @@ input:focus, textarea:focus { border-color: var(--border-3); }
   50%       { opacity: 0.25; }
 }
 .pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
+
+@keyframes btn-busy-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.65; }
+}
+.btn-busy {
+  animation: btn-busy-pulse 1.1s ease-in-out infinite;
+  cursor: wait !important;
+}
