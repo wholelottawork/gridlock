@@ -3,18 +3,9 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { GridlockLogo } from "@/components/gridlock-logo";
+import { WINDOWS_WORKER_DOWNLOAD, WORKER_RELEASES_URL } from "@/lib/worker-downloads";
 
 const fadeUp = { hidden: { opacity: 0, y: 18 }, show: { opacity: 1, y: 0 } };
-
-const WINDOWS_RELEASE = {
-  label: "Windows",
-  version: "v0.1.0",
-  file: "Gridlock-Worker-Setup-0.1.0.exe",
-  size: "94 MB",
-  url: "https://github.com/wholelottawork/gridlock/releases/download/v0.1.0/Gridlock-Worker-Setup-0.1.0.exe",
-  arch: "x64",
-  note: "Windows 10 / 11",
-};
 
 function WindowsIcon() {
   return (
@@ -145,12 +136,12 @@ export default function DownloadPage() {
             <div style={{ color: "var(--text-primary)", marginBottom: 16 }}>
               <WindowsIcon />
             </div>
-            <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 4 }}>{WINDOWS_RELEASE.label}</div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700, marginBottom: 2 }}>{WINDOWS_RELEASE.note}</div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 20 }}>{WINDOWS_RELEASE.arch} · {WINDOWS_RELEASE.size}</div>
+            <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 4 }}>{WINDOWS_WORKER_DOWNLOAD.label}</div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700, marginBottom: 2 }}>{WINDOWS_WORKER_DOWNLOAD.note}</div>
+            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 20 }}>{WINDOWS_WORKER_DOWNLOAD.arch} · {WINDOWS_WORKER_DOWNLOAD.size}</div>
             <a
-              href={WINDOWS_RELEASE.url}
-              download
+              href={WINDOWS_WORKER_DOWNLOAD.url}
+              download={WINDOWS_WORKER_DOWNLOAD.filename}
               style={{
                 display: "block", width: "100%",
                 background: "#FFFFFF", color: "#000000",
@@ -163,10 +154,10 @@ export default function DownloadPage() {
               onMouseEnter={e => (e.currentTarget.style.opacity = "0.88")}
               onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
             >
-              Download {WINDOWS_RELEASE.version}
+              Download {WINDOWS_WORKER_DOWNLOAD.version}
             </a>
             <div style={{ marginTop: 12, fontSize: 11, color: "var(--text-muted)", fontFamily: "monospace", wordBreak: "break-all" }}>
-              {WINDOWS_RELEASE.file}
+              {WINDOWS_WORKER_DOWNLOAD.filename}
             </div>
           </motion.div>
         </div>
@@ -174,7 +165,7 @@ export default function DownloadPage() {
         <div style={{ marginTop: 20, fontSize: 12, color: "var(--text-muted)", fontWeight: 700 }}>
           All releases are signed. View{" "}
           <a
-            href="https://github.com/wholelottawork/gridlock/releases"
+            href={WORKER_RELEASES_URL}
             target="_blank" rel="noopener noreferrer"
             style={{ color: "var(--text-secondary)", textDecoration: "none", fontWeight: 800 }}
           >
@@ -290,8 +281,8 @@ export default function DownloadPage() {
         </p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
           <a
-            href={WINDOWS_RELEASE.url}
-            download
+            href={WINDOWS_WORKER_DOWNLOAD.url}
+            download={WINDOWS_WORKER_DOWNLOAD.filename}
             style={{
               display: "inline-block",
               background: "#FFFFFF", color: "#000",

@@ -4,7 +4,6 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-/** Three nested chevrons on one canvas — matches gridlock-web GridlockLogo SVG. */
 const CHEVRONS = `
 \\      \\\      \\                          //      ///      //
   \\\\    \\\\    \\\\                    ////    ////    ////

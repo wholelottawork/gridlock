@@ -1,8 +1,13 @@
 /** Production download URLs for the Gridlock Worker desktop app (electron-builder). */
 const REPO = process.env.NEXT_PUBLIC_WORKER_RELEASE_REPO ?? "wholelottawork/gridlock";
-const TAG = process.env.NEXT_PUBLIC_WORKER_RELEASE_TAG ?? "latest";
 
 export const WORKER_APP_VERSION = process.env.NEXT_PUBLIC_WORKER_VERSION ?? "0.1.0";
+
+/** GitHub release tag, e.g. worker-v0.1.0 */
+const TAG =
+  process.env.NEXT_PUBLIC_WORKER_RELEASE_TAG ?? `worker-v${WORKER_APP_VERSION}`;
+
+export const WORKER_RELEASES_URL = `https://github.com/${REPO}/releases`;
 
 export const NATIVE_WORKER_PACKAGE = process.env.NEXT_PUBLIC_NATIVE_WORKER_PACKAGE ?? "@gridlock/native-worker";
 
@@ -44,11 +49,22 @@ const WIN_INSTALLER = `Gridlock-Worker-Setup-${WORKER_APP_VERSION}.exe`;
 const MAC_INSTALLER = `Gridlock-Worker-${WORKER_APP_VERSION}.dmg`;
 const LINUX_INSTALLER = `Gridlock-Worker-${WORKER_APP_VERSION}.AppImage`;
 
+/** Windows installer metadata for the /download marketing page. */
+export const WINDOWS_WORKER_DOWNLOAD = {
+  label: "Windows",
+  version: `v${WORKER_APP_VERSION}`,
+  filename: WIN_INSTALLER,
+  url: downloadUrl(WIN_INSTALLER),
+  size: process.env.NEXT_PUBLIC_WORKER_WINDOWS_SIZE ?? "94 MB",
+  arch: "x64",
+  note: "Windows 10 / 11",
+} as const;
+
 export const DESKTOP_WORKER_DOWNLOADS = {
   windows: {
-    label: "Windows",
-    filename: WIN_INSTALLER,
-    url: downloadUrl(WIN_INSTALLER),
+    label: WINDOWS_WORKER_DOWNLOAD.label,
+    filename: WINDOWS_WORKER_DOWNLOAD.filename,
+    url: WINDOWS_WORKER_DOWNLOAD.url,
   },
   mac: {
     label: "macOS",
