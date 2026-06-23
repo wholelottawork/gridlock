@@ -16,10 +16,12 @@
     "@supabase/supabase-js": "^2.49.8",
     "dotenv": "^16.5.0",
     "hono": "^4.7.11",
-    "redis": "^4.7.1"
+    "redis": "^4.7.1",
+    "ws": "^8.21.0"
   },
   "devDependencies": {
     "@types/node": "^20.17.57",
+    "@types/ws": "^8.18.1",
     "tsx": "^4.19.4",
     "typescript": "^5.8.3"
   }

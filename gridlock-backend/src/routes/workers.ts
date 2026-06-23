@@ -4,6 +4,7 @@ import { dbUpsertWorker } from "../db.js";
 import { anchorRegisterWorker } from "../solana.js";
 import { jobsStore, workersRegistry } from "../state.js";
 import type { HeartbeatRequest, RegisterWorkerRequest, WorkerRecord } from "../types.js";
+import { recomputeWorkerStats } from "../worker-stats.js";
 
 export const workerRoutes = new Hono();
 
@@ -26,10 +27,11 @@ workerRoutes.get("/v1/workers", (c) => {
 
 workerRoutes.get("/v1/workers/:address", (c) => {
   const address = c.req.param("address");
-  const worker = workersRegistry.find((w) => w.address.startsWith(address));
+  const worker = workersRegistry.find((w) => w.address === address);
   if (!worker) return c.json({ error: `Worker ${address} not found` }, 404);
+  recomputeWorkerStats(worker);
   const recent = jobsStore
-    .filter((j) => (j.worker_address ?? "").startsWith(address))
+    .filter((j) => j.worker_address === address)
     .slice(-20)
     .reverse();
   return c.json({ ...worker, recent_jobs: recent });
@@ -65,6 +67,7 @@ workerRoutes.post("/v1/workers/register", async (c) => {
     earnings_today: 0,
     penalties_paid: 0,
     is_confidential: false,
+    stake_token_account: config.defaultWorkerStake || undefined,
     last_heartbeat: Date.now() / 1000,
     registered_at: Date.now() / 1000,
   };
@@ -76,7 +79,7 @@ workerRoutes.post("/v1/workers/register", async (c) => {
 
 workerRoutes.post("/v1/workers/heartbeat", async (c) => {
   const req = (await c.req.json()) as HeartbeatRequest;
-  const worker = workersRegistry.find((w) => w.address.startsWith(req.worker_address));
+  const worker = workersRegistry.find((w) => w.address === req.worker_address);
   if (!worker) return c.json({ error: "Worker not found" }, 404);
 
   worker.last_heartbeat = Date.now() / 1000;
@@ -87,5 +90,6 @@ workerRoutes.post("/v1/workers/heartbeat", async (c) => {
   if (req.goodput_score !== undefined) worker.goodput_score = req.goodput_score;
   if (req.p99_ttft_ms !== undefined) worker.p99_ttft_ms = req.p99_ttft_ms;
 
+  void dbUpsertWorker(worker);
   return c.json({ ok: true, ts: worker.last_heartbeat, status: worker.status });
 });

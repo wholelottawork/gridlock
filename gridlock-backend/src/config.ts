@@ -13,6 +13,18 @@ export const config = {
   redisUrl: process.env.REDIS_URL ?? "redis://localhost:6379",
   solanaRpcUrl: process.env.SOLANA_RPC_URL ?? "https://api.devnet.solana.com",
   routerKeypairPath: expandHome(process.env.ROUTER_KEYPAIR_PATH ?? "~/.config/solana/id.json"),
+  /** Off by default — requires LOCK mint, token vaults, and matching Anchor ix encoding. */
+  solanaSettlementEnabled: process.env.SOLANA_SETTLEMENT_ENABLED === "true",
+  lockMint: process.env.LOCK_MINT ?? "",
+  feeVault: process.env.FEE_VAULT ?? "",
+  stakerPool: process.env.STAKER_POOL ?? "",
+  workerPayout: process.env.WORKER_PAYOUT ?? "",
+  treasury: process.env.TREASURY ?? "",
+  burnVault: process.env.BURN_VAULT ?? "",
+  /** Router LOCK ATA — pays open_job escrow (devnet: same wallet as payer). */
+  customerWallet: process.env.CUSTOMER_WALLET ?? "",
+  /** Default worker stake LOCK ATA for penalty transfers. */
+  defaultWorkerStake: process.env.DEFAULT_WORKER_STAKE ?? "",
   supabaseUrl: process.env.SUPABASE_URL ?? "",
   supabaseKey: process.env.SUPABASE_KEY ?? "",
   watcherSampleRate: Number(process.env.WATCHER_SAMPLE_RATE ?? "0.05"),
@@ -24,14 +36,14 @@ export const config = {
   ),
 };
 
-export const OPEN_PATHS = new Set(["/health", "/v1/live"]);
+export const OPEN_PATHS = new Set(["/health", "/v1/live", "/v1/ws"]);
 
 export const PROGRAM_IDS = {
-  providerRegistry: "FtcDkiVRPSjubZwNktwV1wNw8jvgvGHXHhYsTbvAf6T2",
-  jobScheduler: "9FpypwgXqgNGsXrgTtzZ4G62tYB5vH8FZKBHzt3sCAJG",
-  slaRegistry: "3vJZMJReLan77UZE5nJEZf2UrvwfBe5zv78LBre3UPZM",
-  slaEnforcer: "4TVPu4tTHfHWLaj8Srbp6v89KHPcN1t5iijNxQrSR4ci",
-  feeCollector: "4mrEY6MWLFCFA2wHuLqDxT6YzgsYaGjXDa4K1idqD79L",
+  providerRegistry: "GvCMygAV4RNYVgPybMmgEb36AkSKEBQJJw45WfUfSfmu",
+  jobScheduler: "14ZQ7ubKgrWJRhcuzjmUj733fStgwUpERWXMj6pKuYcT",
+  slaRegistry: "5me7JG25p4NH1XCYtxWn9bU5sij8Xos1We5g47TbRxxM",
+  slaEnforcer: "3H3yLvY7m7TaGkMSvvkvG9NQT5nDhVLNrZTfywiBaoLJ",
+  feeCollector: "6GoaeiUQC8DaLXSDjd6CPACZZ1rM4xL4VCzxu1iC5xoU",
 };
 
 export const SLA_TARGETS: Record<string, { ttft: number; tpot: number }> = {

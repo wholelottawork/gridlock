@@ -3,7 +3,7 @@ use anchor_spl::token_interface::{
     self, Mint, Token2022, TokenAccount, TransferChecked,
 };
 
-declare_id!("9FpypwgXqgNGsXrgTtzZ4G62tYB5vH8FZKBHzt3sCAJG");
+declare_id!("14ZQ7ubKgrWJRhcuzjmUj733fStgwUpERWXMj6pKuYcT");
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -247,10 +247,14 @@ pub struct AssignWorker<'info> {
 }
 
 #[derive(Accounts)]
-#[instruction(job_id: [u8; 32])]
+#[instruction(job_id: [u8; 32], sla_met: bool, penalty_deducted: u64)]
 pub struct SettleJob<'info> {
-    /// SLAEnforcer PDA — only it can call settle_job
-    pub sla_enforcer: Signer<'info>,
+    /// SLA Enforcer PDA — signs via CPI when releasing escrow
+    #[account(
+        seeds = [b"sla_enforcer"],
+        bump,
+    )]
+    pub enforcer_authority: Signer<'info>,
 
     #[account(seeds = [b"job_scheduler"], bump)]
     pub scheduler_authority: SystemAccount<'info>,

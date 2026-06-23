@@ -90,6 +90,7 @@ export interface ChatGridlockMeta {
 
 // ─── Chat ────────────────────────────────────────────────────────────────────
 
+/** Send a chat completion. Pass the full conversation in `messages` — workers are stateless. */
 export async function chatCompletion(opts: {
   model: string;
   messages: { role: string; content: string }[];
@@ -172,6 +173,26 @@ export async function registerWorker(body: {
 
 export async function heartbeat(address: string, goodput_score?: number): Promise<{ ok: boolean }> {
   return post("/v1/workers/heartbeat", { worker_address: address, goodput_score });
+}
+
+/** Register a new worker, or send heartbeat if this pubkey is already registered. */
+export async function ensureWorkerRegistered(body: {
+  operator_pubkey: string;
+  role: string;
+  hardware_tier: string;
+  tee_capable: boolean;
+  endpoint?: string;
+}): Promise<{ success: boolean; address: string; tx_sig?: string }> {
+  try {
+    await fetchWorker(body.operator_pubkey);
+    await heartbeat(body.operator_pubkey);
+    return { success: true, address: body.operator_pubkey };
+  } catch (e) {
+    if (e instanceof Error && e.message.includes("404")) {
+      return registerWorker(body);
+    }
+    throw e;
+  }
 }
 
 // ─── Leaderboard ─────────────────────────────────────────────────────────────

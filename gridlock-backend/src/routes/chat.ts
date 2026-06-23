@@ -4,7 +4,9 @@ import { streamSSE } from "hono/streaming";
 import { config, computeFee, PENALTY_MULT, SLA_TARGETS } from "../config.js";
 import { cacheSetTtl, cacheWarmCheck } from "../cache.js";
 import { settleJob, watcherSample } from "../settlement.js";
-import { appendJob } from "../state.js";
+import { anchorAssignWorker, anchorOpenJob } from "../solana-settlement.js";
+import { appendJob, workersRegistry } from "../state.js";
+import { createDispatchPayload, workerHub } from "../ws/hub.js";
 import { hashPrefix, pickDecodeWorker, pickPrefillWorker } from "../workers.js";
 import type { ChatCompletionRequest, JobRecord } from "../types.js";
 
@@ -62,10 +64,111 @@ chatRoutes.post("/v1/chat/completions", async (c) => {
 
   const prefixKey = hashPrefix(prompt);
   const warm = await cacheWarmCheck(prefixKey);
+
+  // Route to WebSocket-connected workers (browser / native) when available
+  if (workerHub.hasConnectedWorkers(slaTier) && !req.stream) {
+    const wsSession = workerHub.pickIdleWorker(slaTier);
+    const registryWorker =
+      wsSession
+        ? workersRegistry.find((w) => w.address === wsSession.address)
+        : pickPrefillWorker(slaTier, confidential, warm);
+
+    if (registryWorker) {
+      if (config.solanaSettlementEnabled) {
+        await anchorOpenJob(jobId, slaTier, fee, confidential);
+      }
+
+      const acceptTs = performance.now();
+      try {
+        const dispatch = createDispatchPayload({
+          jobId,
+          model: req.model,
+          messages: req.messages,
+          slaTier,
+          maxTokens: req.max_tokens ?? 512,
+          customer,
+        });
+
+        if (config.solanaSettlementEnabled) {
+          await anchorAssignWorker(jobId, registryWorker.address);
+        }
+
+        const result = await workerHub.dispatch(dispatch);
+        const decodeWorker = pickDecodeWorker(slaTier, confidential);
+        const ttftMs = result.ttftMs || Math.floor(performance.now() - acceptTs);
+        const tpotMs = result.tpotMs || 0;
+        const slaMet = ttftMs <= targetTtft && tpotMs <= targetTpot;
+        const penalty = slaMet ? null : fee * PENALTY_MULT[slaTier]!;
+
+        await cacheSetTtl(prefixKey, registryWorker.address);
+
+        const jobRecord = createJobRecord({
+          id: jobId,
+          customer,
+          model: req.model,
+          sla_tier: slaTier,
+          ttft_ms: ttftMs,
+          tpot_ms: tpotMs,
+          sla_met: slaMet,
+          confidential,
+          worker: registryWorker.address.slice(0, 8),
+          worker_address: registryWorker.address,
+          decode_worker: decodeWorker?.address.slice(0, 8) ?? null,
+          ts: Date.now() / 1000,
+          penalty_paid: penalty,
+          fee,
+          cache_warm: warm !== null,
+          attestation_hash: confidential ? `attest_${jobId.slice(0, 16)}` : null,
+        });
+        appendJob(jobRecord);
+        void settleJob(jobId, slaTier, ttftMs, tpotMs, slaMet, confidential, registryWorker, fee);
+        watcherSample(jobId, ttftMs);
+
+        return c.json({
+          id: `chatcmpl-${jobId}`,
+          object: "chat.completion",
+          model: req.model,
+          choices: [{
+            index: 0,
+            message: { role: "assistant", content: result.content || "(no response)" },
+            finish_reason: "stop",
+          }],
+          usage: {
+            prompt_tokens: promptTokens,
+            completion_tokens: result.tokensGenerated,
+            total_tokens: promptTokens + result.tokensGenerated,
+          },
+          gridlock: {
+            job_id: jobId,
+            ttft_ms: ttftMs,
+            tpot_ms: tpotMs,
+            sla_tier: slaTier,
+            sla_met: slaMet,
+            sla_target_ttft_ms: targetTtft,
+            worker: registryWorker.address,
+            decode_worker: decodeWorker?.address ?? null,
+            confidential,
+            penalty_due_lock: penalty,
+            fee_lock: fee,
+            cache_warm: warm !== null,
+            attestation_hash: confidential ? `attest_${jobId.slice(0, 16)}` : null,
+          },
+        });
+      } catch (err) {
+        console.log(`[chat] WS dispatch failed: ${err instanceof Error ? err.message : err}`);
+      }
+    }
+  }
+
   const worker = pickPrefillWorker(slaTier, confidential, warm);
   if (!worker) return c.json({ error: "No eligible workers for this SLA tier" }, 503);
   const decodeWorker = pickDecodeWorker(slaTier, confidential);
   const vllmPayload = buildVllmPayload(req);
+
+  if (config.solanaSettlementEnabled) {
+    await anchorOpenJob(jobId, slaTier, fee, confidential);
+    await anchorAssignWorker(jobId, worker.address);
+  }
 
   if (req.stream) {
     return streamSSE(c, async (stream) => {

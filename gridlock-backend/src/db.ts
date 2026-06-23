@@ -17,15 +17,45 @@ function getClient(): SupabaseClient | null {
   }
 }
 
+function formatSupabaseError(error: unknown): string {
+  if (error && typeof error === "object") {
+    const e = error as { message?: string; code?: string; details?: string };
+    return [e.code, e.message, e.details].filter(Boolean).join(": ") || JSON.stringify(error);
+  }
+  return String(error);
+}
+
+/** Map in-memory job to Supabase `jobs` row (columns from 001_initial.sql). */
+function jobToRow(job: JobRecord): Record<string, unknown> {
+  return {
+    id: job.id,
+    customer: job.customer,
+    model: job.model,
+    sla_tier: job.sla_tier,
+    ttft_ms: job.ttft_ms,
+    tpot_ms: job.tpot_ms,
+    sla_met: job.sla_met,
+    confidential: job.confidential,
+    worker: job.worker,
+    worker_address: job.worker_address,
+    ts: job.ts,
+    penalty_paid: job.penalty_paid ?? null,
+    fee: job.fee,
+    status: job.status,
+    attestation_hash: job.attestation_hash ?? null,
+  };
+}
+
 export async function dbInsertJob(job: JobRecord): Promise<void> {
   const sb = getClient();
   if (!sb) return;
   try {
-    const { data, error } = await sb.from("jobs").insert(job);
+    const row = jobToRow(job);
+    const { error } = await sb.from("jobs").upsert(row, { onConflict: "id" });
     if (error) throw error;
-    console.log(`[supabase] job saved ${job.id.slice(0, 8)}:`, data);
+    console.log(`[supabase] job saved ${job.id.slice(0, 8)} (${job.status})`);
   } catch (error) {
-    console.log(`[supabase] insert_job failed: ${error}`);
+    console.log(`[supabase] insert_job failed: ${formatSupabaseError(error)}`);
   }
 }
 
@@ -33,11 +63,30 @@ export async function dbUpsertWorker(worker: WorkerRecord): Promise<void> {
   const sb = getClient();
   if (!sb) return;
   try {
-    const payload = { ...worker, sla_tiers: JSON.stringify(worker.sla_tiers) };
+    const payload = {
+      address: worker.address,
+      role: worker.role,
+      endpoint: worker.endpoint,
+      sla_tiers: JSON.stringify(worker.sla_tiers),
+      tee_capable: worker.tee_capable,
+      reliability_score: Math.round(worker.reliability_score),
+      goodput_score: Math.round(worker.goodput_score),
+      sla_pass_rate: worker.sla_pass_rate,
+      p99_ttft_ms: Math.round(worker.p99_ttft_ms),
+      status: worker.status,
+      staked_lock: Math.round(worker.staked_lock),
+      hardware_tier: worker.hardware_tier,
+      jobs_today: Math.round(worker.jobs_today),
+      earnings_today: worker.earnings_today,
+      penalties_paid: Math.round(worker.penalties_paid * 1_000_000) / 1_000_000,
+      is_confidential: worker.is_confidential,
+      last_heartbeat: worker.last_heartbeat,
+      registered_at: worker.registered_at,
+    };
     const { error } = await sb.from("workers").upsert(payload, { onConflict: "address" });
     if (error) throw error;
   } catch (error) {
-    console.log(`[supabase] upsert_worker failed: ${error}`);
+    console.log(`[supabase] upsert_worker failed: ${formatSupabaseError(error)}`);
   }
 }
 

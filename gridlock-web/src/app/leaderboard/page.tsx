@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { generateWorkers, type Worker, type WorkerRole, type WorkerStatus } from "@/lib/mock-data";
 import { fetchLeaderboard, type ApiWorker } from "@/lib/api-client";
+import { fmt } from "@/lib/utils";
 
 function adaptWorker(w: ApiWorker): Worker & { grid_points: number } {
   return {
@@ -84,7 +85,7 @@ export default function LeaderboardPage() {
         <div style={{ textAlign: "right" }}>
           <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 4 }}>Season ends in</div>
           <div style={{ fontSize: 28, fontWeight: 900, color: "var(--orange)" }}>{season.endsIn}</div>
-          <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{season.totalPoints.toLocaleString()} total points</div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)" }}>{fmt(season.totalPoints, 0)} total points</div>
         </div>
       </div>
 
@@ -151,8 +152,8 @@ export default function LeaderboardPage() {
                       {tab === "goodput"
                         ? w.goodputScore
                         : tab === "reliability"
-                          ? w.reliabilityScore.toLocaleString()
-                          : w.isConfidential ? Math.floor(w.jobsToday * 0.6).toLocaleString() : "0"}
+                          ? fmt(w.reliabilityScore, 0)
+                          : w.isConfidential ? fmt(Math.floor(w.jobsToday * 0.6), 0) : "0"}
                     </td>
                     <td style={{ fontWeight: 700, color: w.slaPassRate >= 9800 ? "var(--green)" : "var(--yellow)" }}>
                       {(w.slaPassRate / 100).toFixed(1)}%
@@ -165,7 +166,7 @@ export default function LeaderboardPage() {
                       )}
                     </td>
                     <td style={{ fontWeight: 800, color: rank === 1 ? "var(--orange)" : rank <= 3 ? "var(--orange-3)" : "var(--text-primary)" }}>
-                      {pts.toLocaleString()}
+                      {fmt(pts, 0)}
                     </td>
                   </motion.tr>
                 );

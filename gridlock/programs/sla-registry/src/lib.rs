@@ -1,11 +1,11 @@
 use anchor_lang::prelude::*;
 
-declare_id!("3vJZMJReLan77UZE5nJEZf2UrvwfBe5zv78LBre3UPZM");
+declare_id!("5me7JG25p4NH1XCYtxWn9bU5sij8Xos1We5g47TbRxxM");
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-/// Challenge window: a receipt with no watcher challenge after this is final.
-pub const CHALLENGE_WINDOW_SECS: i64 = 300;
+/// Challenge window: finalize after this if unchallenged (2s on devnet for fast settlement).
+pub const CHALLENGE_WINDOW_SECS: i64 = 2;
 
 // ── Program ──────────────────────────────────────────────────────────────────
 

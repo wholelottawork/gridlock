@@ -1,8 +1,19 @@
 ﻿"use client";
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { generateWorkers, getNetworkStats, generateJobs, type Worker, type Job, type WorkerRole, type WorkerStatus } from "@/lib/mock-data";
+import { generateWorkers, getNetworkStats, generateJobs, type Worker, type Job, type WorkerRole, type WorkerStatus, type NetworkStats } from "@/lib/mock-data";
 import { fetchNetworkStats, fetchWorkers, fetchJobs, fetchCacheStats, fetchPdStats, type ApiWorker, type ApiJob, type ApiNetworkStats, type ApiCacheStats, type ApiPdStats } from "@/lib/api-client";
+import { fmt } from "@/lib/utils";
+
+const EMPTY_STATS: NetworkStats = {
+  activeworkers: 0,
+  slaPassRate: 0,
+  p99TtftMs: 0,
+  totalPenaltiesPaid: 0,
+  requestsToday: 0,
+  confidentialShare: 0,
+  teeWorkers: 0,
+};
 
 function adaptWorker(w: ApiWorker): Worker {
   return {
@@ -61,7 +72,7 @@ function ScoreBar({ score, max = 10000, color = "var(--orange)" }: { score: numb
       <div className="progress-track" style={{ flex: 1 }}>
         <div className="progress-fill" style={{ width: `${pct}%`, background: color }} />
       </div>
-      <span style={{ fontSize: 11, color, fontWeight: 700, width: 40, textAlign: "right" }}>{score.toLocaleString()}</span>
+      <span style={{ fontSize: 11, color, fontWeight: 700, width: 40, textAlign: "right" }}>{fmt(score, 0)}</span>
     </div>
   );
 }
@@ -69,7 +80,7 @@ function ScoreBar({ score, max = 10000, color = "var(--orange)" }: { score: numb
 export default function ExplorerPage() {
   const [tab, setTab] = useState<ExplorerTab>("network");
   const [workers, setWorkers] = useState<Worker[]>([]);
-  const [stats, setStats] = useState(getNetworkStats());
+  const [stats, setStats] = useState<NetworkStats>(EMPTY_STATS);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [search, setSearch] = useState("");
   const [selectedWorker, setSelectedWorker] = useState<Worker | null>(null);
@@ -133,7 +144,7 @@ export default function ExplorerPage() {
               { label: "SLA PASS RATE",       value: `${stats.slaPassRate}%`,                         accent: "var(--green)" },
               { label: "P99 TTFT",            value: `${stats.p99TtftMs}ms`,                          accent: "var(--text-primary)" },
               { label: "ACTIVE WORKERS",      value: stats.activeworkers.toString(),                   accent: "var(--text-primary)" },
-              { label: "TOTAL PENALTIES",     value: `${stats.totalPenaltiesPaid.toLocaleString()} $LOCK`, accent: "var(--orange)" },
+              { label: "TOTAL PENALTIES",     value: `${fmt(stats.totalPenaltiesPaid, 0)} $LOCK`, accent: "var(--orange)" },
             ].map((s) => (
               <div key={s.label} className="card">
                 <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 10 }}>{s.label}</div>
@@ -151,8 +162,8 @@ export default function ExplorerPage() {
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 14 }}>
                     {[
                       { label: "HIT RATE", value: `${(cacheStats.hit_rate * 100).toFixed(1)}%`, color: cacheStats.hit_rate > 0.5 ? "var(--green)" : "var(--yellow)" },
-                      { label: "HITS",     value: cacheStats.hits.toLocaleString(),               color: "var(--text-primary)" },
-                      { label: "MISSES",   value: cacheStats.misses.toLocaleString(),             color: "var(--text-secondary)" },
+                      { label: "HITS",     value: fmt(cacheStats.hits, 0),               color: "var(--text-primary)" },
+                      { label: "MISSES",   value: fmt(cacheStats.misses, 0),             color: "var(--text-secondary)" },
                     ].map((s) => (
                       <div key={s.label} style={{ background: "var(--bg-3)", borderRadius: 6, padding: 10 }}>
                         <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, marginBottom: 6 }}>{s.label}</div>
@@ -164,7 +175,7 @@ export default function ExplorerPage() {
                     <div className="progress-fill" style={{ width: `${cacheStats.hit_rate * 100}%`, background: "var(--green)" }} />
                   </div>
                   <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>
-                    {cacheStats.entries.toLocaleString()} entries cached · strategy: {cacheStats.strategy}
+                    {fmt(cacheStats.entries, 0)} entries cached · strategy: {cacheStats.strategy}
                   </div>
                 </div>
               )}
@@ -217,7 +228,7 @@ export default function ExplorerPage() {
                 {[
                   { k: "TEE-capable workers",    v: stats.teeWorkers,                      c: "var(--purple)" },
                   { k: "Confidential job share", v: `${stats.confidentialShare}%`,         c: "var(--purple)" },
-                  { k: "Requests today",         v: stats.requestsToday.toLocaleString(), c: "var(--text-primary)" },
+                  { k: "Requests today",         v: fmt(stats.requestsToday, 0), c: "var(--text-primary)" },
                 ].map((r) => (
                   <div key={r.k} style={{ display: "flex", justifyContent: "space-between", fontSize: 13, borderBottom: "1px solid var(--border)", paddingBottom: 8 }}>
                     <span style={{ color: "var(--text-secondary)" }}>{r.k}</span>
@@ -303,8 +314,8 @@ export default function ExplorerPage() {
                     { label: "GPU",         v: selectedWorker.hardwareTier,                        color: "var(--text-primary)" },
                     { label: "Status",      v: selectedWorker.status,                              color: selectedWorker.status === "Active" ? "var(--green)" : "var(--text-secondary)" },
                     { label: "TEE",         v: selectedWorker.teeCapable ? "Yes" : "No",           color: selectedWorker.teeCapable ? "var(--purple)" : "var(--text-muted)" },
-                    { label: "Staked",      v: `${selectedWorker.stakedLock.toLocaleString()} $LOCK`, color: "var(--orange)" },
-                    { label: "Jobs Today",  v: selectedWorker.jobsToday.toLocaleString(),          color: "var(--text-primary)" },
+                    { label: "Staked",      v: `${fmt(selectedWorker.stakedLock, 0)} $LOCK`, color: "var(--orange)" },
+                    { label: "Jobs Today",  v: fmt(selectedWorker.jobsToday, 0),          color: "var(--text-primary)" },
                   ].map((item) => (
                     <div key={item.label} style={{ background: "var(--bg-3)", borderRadius: 5, padding: "10px" }}>
                       <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 600, marginBottom: 4 }}>{item.label.toUpperCase()}</div>
@@ -338,7 +349,7 @@ export default function ExplorerPage() {
                     <span style={{ color: i < 3 ? "var(--orange)" : "var(--text-muted)", fontWeight: 900, width: 20 }}>#{i + 1}</span>
                     <span style={{ fontFamily: "monospace", color: "var(--text-secondary)", flex: 1 }}>{w.address.slice(0, 10)}…</span>
                     <span style={{ color: "var(--text-muted)", fontSize: 11 }}>{w.role}</span>
-                    <span style={{ color: "var(--green)", fontWeight: 700 }}>{w.reliabilityScore.toLocaleString()}</span>
+                    <span style={{ color: "var(--green)", fontWeight: 700 }}>{fmt(w.reliabilityScore, 0)}</span>
                     {w.teeCapable && <span style={{ fontSize: 9, fontWeight: 700, color: "var(--text-secondary)", padding: "1px 4px", borderRadius: 2, background: "rgba(255,255,255,0.05)", border: "1px solid var(--border-2)" }}>TEE</span>}
                   </div>
                 ))}

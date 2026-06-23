@@ -1,7 +1,7 @@
 use anchor_lang::prelude::*;
 use anchor_spl::token_interface::{Mint, TokenAccount, TokenInterface};
 
-declare_id!("FtcDkiVRPSjubZwNktwV1wNw8jvgvGHXHhYsTbvAf6T2");
+declare_id!("GvCMygAV4RNYVgPybMmgEb36AkSKEBQJJw45WfUfSfmu");
 
 // ── Constants ────────────────────────────────────────────────────────────────
 

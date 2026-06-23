@@ -107,6 +107,16 @@ async function sendAnchorIx(programId: string, data: Buffer, accounts: AccountMe
   }
 }
 
+function borshOptionBytes32(value: Buffer | null): Buffer {
+  if (!value) return Buffer.from([0]);
+  return Buffer.concat([Buffer.from([1]), value]);
+}
+
+/** Stable 32-byte job id for on-chain receipt PDAs (matches Anchor [u8; 32]). */
+function jobIdBytes(jobId: string): Buffer {
+  return createHash("sha256").update(jobId).digest();
+}
+
 export async function anchorCommitReceipt(
   jobId: string,
   slaTier: string,
@@ -119,16 +129,18 @@ export async function anchorCommitReceipt(
   try {
     const kp = loadKeypair();
     if (!kp) return null;
-    const seed = Buffer.from(jobId.replace(/-/g, "").slice(0, 32));
-    const [pda] = derivePda(PROGRAM_IDS.slaRegistry, [Buffer.from("receipt"), seed]);
+    const id = jobIdBytes(jobId);
+    const [pda] = derivePda(PROGRAM_IDS.slaRegistry, [Buffer.from("receipt"), id]);
     const data = Buffer.concat([
       anchorDiscriminator("commit_receipt"),
-      borshString(jobId),
+      id,
       borshString(slaTier),
       borshU32(ttftMs),
       borshU32(tpotMs),
+      Buffer.alloc(64),
       borshBool(slaMet),
       borshBool(confidential),
+      borshOptionBytes32(null),
     ]);
     return sendAnchorIx(PROGRAM_IDS.slaRegistry, data, [
       { pubkey: kp.publicKey, isSigner: true, isWritable: true },
@@ -146,10 +158,10 @@ export async function anchorSettleOrPenalize(jobId: string): Promise<string | nu
   try {
     const kp = loadKeypair();
     if (!kp) return null;
-    const seed = Buffer.from(jobId.replace(/-/g, "").slice(0, 32));
-    const [receipt] = derivePda(PROGRAM_IDS.slaRegistry, [Buffer.from("receipt"), seed]);
+    const id = jobIdBytes(jobId);
+    const [receipt] = derivePda(PROGRAM_IDS.slaRegistry, [Buffer.from("receipt"), id]);
     const [enforcer] = derivePda(PROGRAM_IDS.slaEnforcer, [Buffer.from("sla_enforcer")]);
-    const data = Buffer.concat([anchorDiscriminator("settle_or_penalize"), borshString(jobId)]);
+    const data = Buffer.concat([anchorDiscriminator("settle_or_penalize"), id]);
     return sendAnchorIx(PROGRAM_IDS.slaEnforcer, data, [
       { pubkey: enforcer, isSigner: false, isWritable: false },
       { pubkey: receipt, isSigner: false, isWritable: true },
@@ -162,20 +174,25 @@ export async function anchorSettleOrPenalize(jobId: string): Promise<string | nu
   }
 }
 
-export async function anchorDistributeFees(jobId: string, amountLock: number): Promise<string | null> {
+export async function anchorDistributeFees(_jobId: string, amountLock: number): Promise<string | null> {
   if (!config.solanaRpcUrl || config.solanaRpcUrl.includes("localhost")) return null;
+  const { lockMint, feeVault, stakerPool, workerPayout, treasury, burnVault } = config;
+  if (!lockMint || !feeVault || !stakerPool || !workerPayout || !treasury || !burnVault) {
+    console.log("[solana] distribute_fees: LOCK mint / vault env vars not configured");
+    return null;
+  }
   try {
-    const kp = loadKeypair();
-    if (!kp) return null;
     const [collector] = derivePda(PROGRAM_IDS.feeCollector, [Buffer.from("fee_collector")]);
-    const data = Buffer.concat([
-      anchorDiscriminator("distribute_fees"),
-      borshString(jobId),
-      borshU64(amountLock),
-    ]);
+    const data = Buffer.concat([anchorDiscriminator("distribute_fees"), borshU64(amountLock)]);
     return sendAnchorIx(PROGRAM_IDS.feeCollector, data, [
-      { pubkey: collector, isSigner: false, isWritable: true },
-      { pubkey: kp.publicKey, isSigner: true, isWritable: true },
+      { pubkey: collector, isSigner: false, isWritable: false },
+      { pubkey: new PublicKey(feeVault), isSigner: false, isWritable: true },
+      { pubkey: new PublicKey(stakerPool), isSigner: false, isWritable: true },
+      { pubkey: new PublicKey(workerPayout), isSigner: false, isWritable: true },
+      { pubkey: new PublicKey(treasury), isSigner: false, isWritable: true },
+      { pubkey: new PublicKey(burnVault), isSigner: false, isWritable: true },
+      { pubkey: new PublicKey(lockMint), isSigner: false, isWritable: false },
+      { pubkey: TOKEN_2022, isSigner: false, isWritable: false },
     ]);
   } catch (error) {
     console.log(`[solana] distribute_fees: ${error}`);

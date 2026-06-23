@@ -2,13 +2,19 @@ import { createClient } from "redis";
 import { config } from "./config.js";
 
 let redisClient: ReturnType<typeof createClient> | null = null;
+let redisUnavailable = false;
 const cacheIndex = new Map<string, string>();
 let cacheHits = 0;
 let cacheMisses = 0;
 
+function redisErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
 export async function getRedis(): Promise<ReturnType<typeof createClient> | null> {
   if (redisClient) return redisClient;
-  if (!config.redisUrl) return null;
+  if (redisUnavailable || !config.redisUrl) return null;
   try {
     const client = createClient({
       url: config.redisUrl,
@@ -26,7 +32,8 @@ export async function getRedis(): Promise<ReturnType<typeof createClient> | null
     console.log("[redis] connected");
     return client;
   } catch (error) {
-    console.log(`[redis] unavailable: ${error}`);
+    redisUnavailable = true;
+    console.log(`[redis] unavailable: ${redisErrorMessage(error)} (using in-memory cache)`);
     return null;
   }
 }

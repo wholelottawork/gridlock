@@ -20,6 +20,8 @@ import urllib.request
 import urllib.error
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
+from job_messages import prepare_inference_messages
+
 # ── Config ────────────────────────────────────────────────────────────────────
 
 BACKEND_URL  = os.getenv("GRIDLOCK_BACKEND_URL", "http://localhost:8080")
@@ -151,22 +153,111 @@ def send_heartbeat():
     })
 
 
+def _ws_url() -> str:
+    base = BACKEND_URL.rstrip("/")
+    if base.startswith("https://"):
+        return base.replace("https://", "wss://", 1) + "/v1/ws"
+    return base.replace("http://", "ws://", 1) + "/v1/ws"
+
+
+_ws_job_queue: list = []
+_ws_job_lock = threading.Lock()
+_ws_app = None
+_active_ws = None
+
+
+def _ws_on_message(_ws, message: str):
+    try:
+        msg = json.loads(message)
+    except Exception:
+        return
+    if msg.get("type") == "job:new":
+        with _ws_job_lock:
+            _ws_job_queue.append(msg)
+
+
+def _ws_on_open(ws):
+    global _active_ws
+    _active_ws = ws
+    if not state["worker_address"]:
+        return
+    ws.send(json.dumps({
+        "type": "worker:register",
+        "worker_address": state["worker_address"],
+        "worker_type": "native",
+        "model": "llama-3.1-8b-instant",
+        "tok_per_sec": max(state["tokens_per_sec"], 1),
+    }))
+    log({"event": "ws_registered"})
+
+
+def ws_loop():
+    global _ws_app
+    try:
+        import websocket  # websocket-client
+    except ImportError:
+        log({"event": "ws_unavailable", "msg": "pip install websocket-client for WebSocket jobs"})
+        return
+
+    while state["running"]:
+        try:
+            _ws_app = websocket.WebSocketApp(
+                _ws_url(),
+                on_message=_ws_on_message,
+                on_open=_ws_on_open,
+            )
+            _ws_app.run_forever(ping_interval=30, ping_timeout=10)
+        except Exception as e:
+            log({"event": "ws_error", "err": str(e)})
+        time.sleep(3)
+
+
+def _dequeue_ws_job() -> dict | None:
+    with _ws_job_lock:
+        if _ws_job_queue:
+            return _ws_job_queue.pop(0)
+    return None
+
+
 def fetch_next_job() -> dict | None:
     if not state["backend_ok"] or not state["worker_address"]:
         return None
-    return _req("GET", f"/v1/jobs/next?worker_address={state['worker_address']}")
+    ws_job = _dequeue_ws_job()
+    if ws_job:
+        return {"job": {
+            "id": ws_job.get("job_id"),
+            "model": ws_job.get("model"),
+            "messages": ws_job.get("messages", []),
+            "sla_tier": ws_job.get("sla_tier", "standard"),
+            "output_tokens": ws_job.get("max_tokens", 512),
+        }}
+    resp = _req("GET", f"/v1/jobs/next?worker_address={state['worker_address']}")
+    if resp and resp.get("job"):
+        return resp
+    return None
 
 
-def complete_job_backend(job_id: str, ttft_ms: float, tpot_ms: float, output_tokens: int):
+def complete_job_backend(job_id: str, ttft_ms: float, tpot_ms: float, output_tokens: int, response: str = ""):
     if not state["backend_ok"]:
         return
-    _req("POST", "/v1/jobs/complete", {
+    body = {
         "job_id":         job_id,
         "worker_address": state["worker_address"],
         "ttft_ms":        ttft_ms,
         "tpot_ms":        tpot_ms,
         "output_tokens":  output_tokens,
-    })
+        "response":       response,
+    }
+    if _active_ws:
+        try:
+            _active_ws.send(json.dumps({
+                "type": "job:complete",
+                **body,
+            }))
+            return
+        except Exception:
+            pass
+    _req("POST", "/v1/jobs/complete", body)
 
 # ── Heartbeat loop ────────────────────────────────────────────────────────────
 
@@ -185,14 +276,18 @@ PRICE_PER_1M = 8.5
 
 def worker_loop():
     while state["running"]:
-        # Try to get a real job from the backend
-        real_job = fetch_next_job()
+        resp = fetch_next_job()
+        job = resp.get("job") if resp else None
 
-        if real_job:
-            job_id  = real_job["id"]
-            tokens  = real_job.get("output_tokens", random.choice(TOKEN_OPTS))
-            tier    = real_job.get("sla_tier", "Batch")
+        if job:
+            job_id  = job["id"]
+            tokens  = job.get("output_tokens", random.choice(TOKEN_OPTS))
+            tier    = job.get("sla_tier", "standard")
+            inference_messages = prepare_inference_messages(job.get("messages", []))
         else:
+            if state["backend_ok"]:
+                time.sleep(1.0)
+                continue
             # Standalone mock job
             time.sleep(random.uniform(2.5, 6.0))
             if not state["running"]:
@@ -200,6 +295,7 @@ def worker_loop():
             job_id = f"local_{random.randint(0, 0xFFFFFF):06x}"
             tokens = random.choice(TOKEN_OPTS)
             tier   = random.choice(TIERS)
+            inference_messages = []
 
         # Spin up GPU metrics
         state["gpu"]["utilization"]  = random.randint(72, 96)
@@ -209,8 +305,11 @@ def worker_loop():
         tps = random.randint(2000, 3400)
         state["tokens_per_sec"] = tps
 
-        state["active_job"] = {"id": job_id, "tokens": tokens, "tier": tier, "progress": 0.0}
-        log({"event": "job_start", "id": job_id, "tokens": tokens, "tier": tier})
+        state["active_job"] = {
+            "id": job_id, "tokens": tokens, "tier": tier, "progress": 0.0,
+            "turns": len(inference_messages),
+        }
+        log({"event": "job_start", "id": job_id, "tokens": tokens, "tier": tier, "turns": len(inference_messages)})
 
         # Simulate inference
         t0       = time.time()
@@ -248,7 +347,10 @@ def worker_loop():
             state["earnings"]["week"]   = round(state["earnings"]["week"]  + earn, 4)
             state["earnings"]["total"]  = round(state["earnings"]["total"] + earn, 4)
             state["jobs_today"]        += 1
-            complete_job_backend(job_id, ttft_ms, tpot_ms, tokens)
+            complete_job_backend(
+                job_id, ttft_ms, tpot_ms, tokens,
+                response=f"[mock inference over {len(inference_messages)} messages]",
+            )
 
         log({"event": "job_done", "id": job_id, "status": record["status"], "earn": earn})
 
@@ -297,6 +399,7 @@ class Handler(BaseHTTPRequestHandler):
                 send_heartbeat()
                 _worker_thread = threading.Thread(target=worker_loop, daemon=True)
                 _worker_thread.start()
+                threading.Thread(target=ws_loop, daemon=True).start()
             self._json({"ok": True, "backend_ok": state["backend_ok"]})
 
         elif self.path == "/worker/stop":

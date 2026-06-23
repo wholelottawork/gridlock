@@ -3,7 +3,7 @@ use anchor_spl::token_interface::{
     self, Mint, Token2022, TokenAccount, TransferChecked,
 };
 
-declare_id!("4mrEY6MWLFCFA2wHuLqDxT6YzgsYaGjXDa4K1idqD79L");
+declare_id!("6GoaeiUQC8DaLXSDjd6CPACZZ1rM4xL4VCzxu1iC5xoU");
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 

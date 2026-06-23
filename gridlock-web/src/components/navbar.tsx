@@ -3,6 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useEffect, useRef, useState } from "react";
+import { WalletIcon } from "@/components/wallet-icon";
 
 const links = [
   { href: "/worker",      label: "Worker" },
@@ -14,10 +15,12 @@ const links = [
   { href: "/docs",        label: "Docs" },
 ];
 
-const WALLET_ICONS: Record<string, string> = {
-  Phantom:  "👻",
-  Solflare: "🔆",
-  Backpack: "🎒",
+const WALLET_ORDER = ["Phantom", "MetaMask", "Solflare"];
+
+const INSTALL_LINKS: Record<string, string> = {
+  Phantom: "https://phantom.app",
+  MetaMask: "https://metamask.io",
+  Solflare: "https://solflare.com",
 };
 
 export function Navbar() {
@@ -57,7 +60,13 @@ export function Navbar() {
     : null;
 
   const availableWallets = mounted
-    ? wallets.filter((w) => w.readyState === "Installed" || w.readyState === "Loadable")
+    ? wallets
+        .filter((w) => w.readyState === "Installed" || w.readyState === "Loadable")
+        .sort((a, b) => {
+          const ai = WALLET_ORDER.indexOf(a.adapter.name);
+          const bi = WALLET_ORDER.indexOf(b.adapter.name);
+          return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+        })
     : [];
 
   const isConnected  = mounted && connected;
@@ -168,7 +177,7 @@ export function Navbar() {
           >
             {isConnected ? (
               <>
-                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#AAAAAA", display: "inline-block", flexShrink: 0 }} />
+                <WalletIcon name={wallet?.adapter.name ?? ""} icon={wallet?.adapter.icon} size={18} />
                 {shortAddr}
                 <span style={{ opacity: 0.4, fontSize: 9 }}>▾</span>
               </>
@@ -208,12 +217,32 @@ export function Navbar() {
                 <>
                   <div style={{ padding: "8px 12px 4px", fontSize: 10, color: "#404040", fontWeight: 700, letterSpacing: "1px" }}>SELECT WALLET</div>
                   {availableWallets.length === 0 ? (
-                    <div style={{ padding: "10px 12px", fontSize: 12, color: "#555555", lineHeight: 1.6 }}>
-                      No wallets detected.{" "}
-                      <a href="https://phantom.app" target="_blank" rel="noopener noreferrer"
-                        style={{ color: "#FFFFFF", textDecoration: "none", fontWeight: 700 }}>
-                        Install Phantom →
-                      </a>
+                    <div style={{ padding: "6px 6px 4px" }}>
+                      <div style={{ padding: "8px 12px 6px", fontSize: 12, color: "#555555", lineHeight: 1.6 }}>
+                        No wallets detected. Install one:
+                      </div>
+                      {WALLET_ORDER.map((name) => (
+                        <a
+                          key={name}
+                          href={INSTALL_LINKS[name]}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: "flex", alignItems: "center", gap: 10,
+                            padding: "9px 12px", borderRadius: 6,
+                            textDecoration: "none", color: "#FFFFFF",
+                            fontSize: 13, fontWeight: 600,
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = "rgba(255,255,255,0.04)"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                        >
+                          <WalletIcon name={name} size={20} />
+                          {name}
+                          <span style={{ marginLeft: "auto", fontSize: 10, color: "#666666", fontWeight: 700 }}>
+                            INSTALL →
+                          </span>
+                        </a>
+                      ))}
                     </div>
                   ) : (
                     availableWallets.map((w) => (
@@ -229,7 +258,7 @@ export function Navbar() {
                         onMouseEnter={e => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
                         onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
                       >
-                        <span style={{ fontSize: 16 }}>{WALLET_ICONS[w.adapter.name] ?? "◆"}</span>
+                        <WalletIcon name={w.adapter.name} icon={w.adapter.icon} size={20} />
                         {w.adapter.name}
                         {w.readyState === "Installed" && (
                           <span style={{ marginLeft: "auto", fontSize: 10, color: "#666666", fontWeight: 700, letterSpacing: "0.5px" }}>

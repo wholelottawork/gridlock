@@ -1,12 +1,11 @@
 import { config, PENALTY_MULT } from "./config.js";
 import { dbInsertJob } from "./db.js";
-import {
-  anchorCommitReceipt,
-  anchorDistributeFees,
-  anchorSettleOrPenalize,
-} from "./solana.js";
 import { addLockBurned, broadcastEvent, jobsStore } from "./state.js";
 import type { WorkerRecord } from "./types.js";
+import { onWorkerJobSettled } from "./worker-stats.js";
+import { runOnChainSettlement } from "./solana-settlement.js";
+
+let settlementSkipLogged = false;
 
 export async function settleJob(
   jobId: string,
@@ -24,15 +23,24 @@ export async function settleJob(
 
   addLockBurned(fee * 0.1);
 
-  await anchorCommitReceipt(jobId, slaTier, ttftMs, tpotMs, slaMet, confidential);
-  if (!slaMet) await anchorSettleOrPenalize(jobId);
-  await anchorDistributeFees(jobId, Math.floor(fee * 1_000_000));
+  if (config.solanaSettlementEnabled) {
+    await runOnChainSettlement(jobId, slaTier, ttftMs, tpotMs, slaMet, confidential, worker, fee);
+  } else if (!settlementSkipLogged) {
+    settlementSkipLogged = true;
+    console.log(
+      "[solana] on-chain settlement skipped (SOLANA_SETTLEMENT_ENABLED=false). " +
+        "Jobs still settle locally; enable after LOCK mint + vaults are initialized.",
+    );
+  }
 
   const job = jobsStore.find((j) => j.id === jobId);
   if (job) {
     job.status = "settled";
+    if (!slaMet && penalty != null) job.penalty_paid = Math.round(penalty * 10000) / 10000;
     await dbInsertJob(job);
   }
+
+  await onWorkerJobSettled(worker);
 
   broadcastEvent({
     type: "job",

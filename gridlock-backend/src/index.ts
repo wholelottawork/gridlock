@@ -9,6 +9,7 @@ import { jobRoutes } from "./routes/jobs.js";
 import { liveRoutes } from "./routes/live.js";
 import { statsRoutes } from "./routes/stats.js";
 import { workerRoutes } from "./routes/workers.js";
+import { attachWebSocketServer } from "./ws/attach.js";
 import { initWorkersAndJobs, startHeartbeatWatcher } from "./workers.js";
 
 const app = new Hono();
@@ -44,9 +45,10 @@ async function bootstrap(): Promise<void> {
   void getRedis();
   startHeartbeatWatcher();
 
-  serve({ fetch: app.fetch, port: config.port, hostname: "0.0.0.0" }, (info) => {
+  const server = serve({ fetch: app.fetch, port: config.port, hostname: "0.0.0.0" }, (info) => {
     console.log(`Gridlock Router listening on http://localhost:${info.port}`);
   });
+  attachWebSocketServer(server);
 }
 
 bootstrap().catch((error) => {

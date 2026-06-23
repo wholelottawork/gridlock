@@ -17,6 +17,8 @@ export interface WorkerRecord {
   is_confidential: boolean;
   last_heartbeat: number;
   registered_at: number;
+  /** Token-2022 LOCK account debited on SLA miss (PermanentDelegate). */
+  stake_token_account?: string;
   grid_points?: number;
 }
 

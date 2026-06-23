@@ -12,6 +12,12 @@ import {
   type ApiNetworkStats,
   type ChatGridlockMeta,
 } from "@/lib/api-client";
+import {
+  buildChatMessages,
+  clearStoredConsoleChat,
+  loadStoredConsoleChat,
+  saveStoredConsoleChat,
+} from "@/lib/conversation";
 
 type Tab = "playground" | "overview" | "monitor" | "penalties" | "keys" | "billing" | "privacy";
 
@@ -21,11 +27,11 @@ const MODELS = [
   { value: "mixtral-8x7b-32768",       label: "Mixtral 8x7B" },
 ];
 
-const SLA_TIERS: { id: SlaTier; label: string; ttft: string; penalty: string }[] = [
-  { id: "realtime",     label: "Realtime",     ttft: "< 300ms",      penalty: "2× fee" },
-  { id: "standard",     label: "Standard",     ttft: "< 800ms",      penalty: "1× fee" },
-  { id: "batch",        label: "Batch",        ttft: "< 5s",         penalty: "0.25× fee" },
-  { id: "confidential", label: "Confidential", ttft: "< 800ms + TEE", penalty: "1× + slash" },
+const SLA_TIERS: { id: SlaTier; label: string; ttft: string; tpot: number; penalty: string }[] = [
+  { id: "realtime",     label: "Realtime",     ttft: "< 300ms",      tpot: 60,   penalty: "2× fee" },
+  { id: "standard",     label: "Standard",     ttft: "< 800ms",      tpot: 120,  penalty: "1× fee" },
+  { id: "batch",        label: "Batch",        ttft: "< 5s",         tpot: 9999, penalty: "0.25× fee" },
+  { id: "confidential", label: "Confidential", ttft: "< 800ms + TEE", tpot: 120, penalty: "1× + slash" },
 ];
 
 interface PlayMessage {
@@ -66,8 +72,22 @@ export default function ConsolePage() {
   const [playElapsed, setPlayElapsed] = useState(0);
   const [playMessages, setPlayMessages] = useState<PlayMessage[]>([]);
   const [playError, setPlayError]     = useState<string | null>(null);
+  const [chatHydrated, setChatHydrated] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    const stored = loadStoredConsoleChat();
+    if (stored.playMessages?.length) setPlayMessages(stored.playMessages as PlayMessage[]);
+    if (stored.playModel) setPlayModel(stored.playModel);
+    if (stored.playSla) setPlaySla(stored.playSla as SlaTier);
+    setChatHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    if (!chatHydrated) return;
+    saveStoredConsoleChat({ playModel, playSla, playMessages });
+  }, [chatHydrated, playModel, playSla, playMessages]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -85,7 +105,10 @@ export default function ConsolePage() {
     try {
       const { content, meta } = await chatCompletion({
         model: playModel,
-        messages: [{ role: "user", content: prompt }],
+        messages: buildChatMessages(
+          playMessages.map((m) => ({ user: m.prompt, assistant: m.content })),
+          prompt,
+        ),
         sla: playSla,
         privacy: playPrivacy,
       });
@@ -96,6 +119,13 @@ export default function ConsolePage() {
       if (timerRef.current) clearInterval(timerRef.current);
       setPlayLoading(false);
     }
+  }
+
+  function clearChat() {
+    setPlayMessages([]);
+    setPlayInput("");
+    setPlayError(null);
+    clearStoredConsoleChat();
   }
 
   // ── Overview / real stats ─────────────────────────────────────────────────
@@ -221,6 +251,22 @@ export default function ConsolePage() {
                 </span>
               </div>
             </div>
+
+            {playMessages.length > 0 && (
+              <div style={{ flexShrink: 0 }}>
+                <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 7 }}>CHAT</div>
+                <button
+                  type="button"
+                  onClick={clearChat}
+                  style={{
+                    padding: "6px 13px", borderRadius: 5, cursor: "pointer", fontSize: 11, fontWeight: 700,
+                    border: "1px solid var(--border)", background: "var(--bg-3)", color: "var(--text-muted)",
+                  }}
+                >
+                  New chat
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Chat area */}
@@ -278,6 +324,12 @@ export default function ConsolePage() {
                       </span>
                       <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
                         target &lt;{msg.meta.sla_target_ttft_ms}ms
+                      </span>
+                      <span style={{ fontSize: 11, color: "var(--text-secondary)", fontWeight: 600 }}>
+                        TPOT {msg.meta.tpot_ms}ms
+                      </span>
+                      <span style={{ fontSize: 11, color: "var(--text-muted)" }}>
+                        target &lt;{SLA_TIERS.find((t) => t.id === msg.meta.sla_tier)?.tpot ?? 120}ms
                       </span>
                       {msg.meta.penalty_due_lock ? (
                         <span style={{ fontSize: 11, color: "var(--orange)", fontWeight: 700 }}>

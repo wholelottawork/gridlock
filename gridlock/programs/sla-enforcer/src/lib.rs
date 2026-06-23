@@ -3,7 +3,12 @@ use anchor_spl::token_interface::{
     self, Mint, Token2022, TokenAccount, TransferChecked,
 };
 
-declare_id!("4TVPu4tTHfHWLaj8Srbp6v89KHPcN1t5iijNxQrSR4ci");
+declare_id!("3H3yLvY7m7TaGkMSvvkvG9NQT5nDhVLNrZTfywiBaoLJ");
+
+pub mod job_scheduler {
+    use super::*;
+    declare_id!("14ZQ7ubKgrWJRhcuzjmUj733fStgwUpERWXMj6pKuYcT");
+}
 
 // ── Program ──────────────────────────────────────────────────────────────────
 
@@ -11,11 +16,6 @@ declare_id!("4TVPu4tTHfHWLaj8Srbp6v89KHPcN1t5iijNxQrSR4ci");
 pub mod sla_enforcer {
     use super::*;
 
-    /// Settle a finalized receipt: release escrow on SLA met, penalize on miss.
-    ///
-    /// This is the critical instruction — it uses the Token-2022
-    /// PermanentDelegate to transfer penalty directly from the worker's
-    /// staked LOCK to the customer without requiring the worker's signature.
     pub fn settle_or_penalize(ctx: Context<SettleOrPenalize>, job_id: [u8; 32]) -> Result<()> {
         let receipt = &ctx.accounts.receipt;
         require!(receipt.finalized, ErrorCode::ReceiptNotFinalized);
@@ -24,9 +24,9 @@ pub mod sla_enforcer {
         let job = &ctx.accounts.job;
         require!(job.job_id == job_id, ErrorCode::JobIdMismatch);
 
+        let mut penalty_deducted: u64 = 0;
+
         if receipt.sla_met {
-            // ── Happy path: release escrow to fee collector ───────────────
-            // FeeCollector splits: 60% stakers / 20% workers / 10% burn / 10% treasury
             emit!(JobSettled {
                 job_id,
                 sla_met: true,
@@ -34,38 +34,35 @@ pub mod sla_enforcer {
             });
             msg!("SLA met — releasing escrow to FeeCollector");
         } else {
-            // ── Penalty path: PermanentDelegate auto-transfer ─────────────
-            let penalty_amount = penalty_for_tier(&receipt.sla_tier, job.payment_amount)?;
+            penalty_deducted = penalty_for_tier(&receipt.sla_tier, job.payment_amount)?;
 
-            let actual_penalty = if ctx.accounts.worker_stake.amount >= penalty_amount {
-                penalty_amount
+            let actual_penalty = if ctx.accounts.worker_stake.amount >= penalty_deducted {
+                penalty_deducted
             } else {
-                // Worker stake insufficient — insurance pool tops up the diff
-                let shortfall = penalty_amount - ctx.accounts.worker_stake.amount;
+                let shortfall = penalty_deducted - ctx.accounts.worker_stake.amount;
                 emit!(InsuranceTopUp { job_id, amount: shortfall });
                 ctx.accounts.worker_stake.amount
             };
 
-            // Transfer penalty from worker stake → customer using PermanentDelegate
-            // The SLAEnforcer PDA holds the PermanentDelegate authority over all
-            // worker stake accounts — set at LOCK mint initialization time.
-            let enforcer_seeds: &[&[u8]] = &[b"sla_enforcer", &[ctx.bumps.enforcer_authority]];
-            let signer = &[enforcer_seeds];
+            if actual_penalty > 0 {
+                let enforcer_seeds: &[&[u8]] = &[b"sla_enforcer", &[ctx.bumps.enforcer_authority]];
+                let signer = &[enforcer_seeds];
 
-            token_interface::transfer_checked(
-                CpiContext::new_with_signer(
-                    ctx.accounts.token_program.key(),
-                    TransferChecked {
-                        from: ctx.accounts.worker_stake.to_account_info(),
-                        mint: ctx.accounts.lock_mint.to_account_info(),
-                        to: ctx.accounts.customer_wallet.to_account_info(),
-                        authority: ctx.accounts.enforcer_authority.to_account_info(),
-                    },
-                    signer,
-                ),
-                actual_penalty,
-                ctx.accounts.lock_mint.decimals,
-            )?;
+                token_interface::transfer_checked(
+                    CpiContext::new_with_signer(
+                        ctx.accounts.token_program.key(),
+                        TransferChecked {
+                            from: ctx.accounts.worker_stake.to_account_info(),
+                            mint: ctx.accounts.lock_mint.to_account_info(),
+                            to: ctx.accounts.customer_wallet.to_account_info(),
+                            authority: ctx.accounts.enforcer_authority.to_account_info(),
+                        },
+                        signer,
+                    ),
+                    actual_penalty,
+                    ctx.accounts.lock_mint.decimals,
+                )?;
+            }
 
             emit!(JobSettled {
                 job_id,
@@ -74,18 +71,55 @@ pub mod sla_enforcer {
             });
 
             msg!(
-                "SLA MISSED — {} LOCK penalty transferred worker→customer (PermanentDelegate)",
+                "SLA MISSED — {} LOCK penalty transferred worker→customer",
                 actual_penalty
             );
         }
+
+        // Release escrow remainder to fee vault via JobScheduler CPI
+        let enforcer_seeds: &[&[u8]] = &[b"sla_enforcer", &[ctx.bumps.enforcer_authority]];
+        let signer = &[enforcer_seeds];
+
+        let mut data = Vec::with_capacity(8 + 32 + 1 + 8);
+        data.extend_from_slice(&settle_job_discriminator());
+        data.extend_from_slice(&job_id);
+        data.push(if receipt.sla_met { 1 } else { 0 });
+        data.extend_from_slice(&penalty_deducted.to_le_bytes());
+
+        let ix = anchor_lang::solana_program::instruction::Instruction {
+            program_id: job_scheduler::ID,
+            accounts: vec![
+                AccountMeta::new(ctx.accounts.enforcer_authority.key(), true),
+                AccountMeta::new_readonly(ctx.accounts.scheduler_authority.key(), false),
+                AccountMeta::new(ctx.accounts.job.key(), false),
+                AccountMeta::new(ctx.accounts.job_escrow.key(), false),
+                AccountMeta::new(ctx.accounts.fee_vault.key(), false),
+                AccountMeta::new_readonly(ctx.accounts.lock_mint.key(), false),
+                AccountMeta::new_readonly(ctx.accounts.token_program.key(), false),
+            ],
+            data,
+        };
+
+        anchor_lang::solana_program::program::invoke_signed(
+            &ix,
+            &[
+                ctx.accounts.enforcer_authority.to_account_info(),
+                ctx.accounts.scheduler_authority.to_account_info(),
+                ctx.accounts.job.to_account_info(),
+                ctx.accounts.job_escrow.to_account_info(),
+                ctx.accounts.fee_vault.to_account_info(),
+                ctx.accounts.lock_mint.to_account_info(),
+                ctx.accounts.token_program.to_account_info(),
+            ],
+            signer,
+        )?;
+
         Ok(())
     }
 
-    /// Mark a job as missed due to worker abandonment (heartbeat timeout).
-    /// Called by the heartbeat crank after ProviderRegistry detects timeout.
     pub fn mark_missed(ctx: Context<MarkMissed>, job_id: [u8; 32]) -> Result<()> {
-        // Force the receipt to sla_met=false so settle_or_penalize applies penalty
         let receipt = &mut ctx.accounts.receipt;
+        require!(receipt.job_id == job_id, ErrorCode::JobIdMismatch);
         receipt.sla_met = false;
         receipt.finalized = true;
         emit!(JobAbandoned { job_id });
@@ -93,68 +127,112 @@ pub mod sla_enforcer {
     }
 }
 
+use anchor_lang::solana_program::instruction::AccountMeta;
+
+fn settle_job_discriminator() -> [u8; 8] {
+    [0xf6, 0x9b, 0xdd, 0x22, 0xa8, 0x46, 0xad, 0x48]
+}
+
 // ── Accounts ─────────────────────────────────────────────────────────────────
 
 #[derive(Accounts)]
 #[instruction(job_id: [u8; 32])]
 pub struct SettleOrPenalize<'info> {
-    /// PDA that holds PermanentDelegate authority over worker stake accounts
-    #[account(
-        seeds = [b"sla_enforcer"],
-        bump,
-    )]
+    #[account(seeds = [b"sla_enforcer"], bump)]
     pub enforcer_authority: SystemAccount<'info>,
 
-    /// The finalized latency receipt (from SLARegistry)
+    #[account(
+        mut,
+        owner = sla_registry::ID @ ErrorCode::InvalidReceipt,
+    )]
     pub receipt: Account<'info, ReceiptAccount>,
 
-    /// The job account (from JobScheduler)
+    #[account(
+        mut,
+        owner = job_scheduler::ID @ ErrorCode::InvalidJob,
+    )]
     pub job: Account<'info, ServingJob>,
 
-    /// Worker's staked LOCK token account — penalty is deducted here
     #[account(mut)]
     pub worker_stake: InterfaceAccount<'info, TokenAccount>,
 
-    /// Customer's LOCK wallet — receives the penalty
     #[account(mut)]
     pub customer_wallet: InterfaceAccount<'info, TokenAccount>,
 
-    /// LOCK mint (Token-2022)
+    #[account(seeds = [b"job_scheduler"], bump)]
+    pub scheduler_authority: SystemAccount<'info>,
+
+    #[account(
+        mut,
+        seeds = [b"job_escrow", job_id.as_ref()],
+        bump,
+        token::mint = lock_mint,
+        token::authority = scheduler_authority,
+    )]
+    pub job_escrow: InterfaceAccount<'info, TokenAccount>,
+
+    #[account(mut)]
+    pub fee_vault: InterfaceAccount<'info, TokenAccount>,
+
     pub lock_mint: InterfaceAccount<'info, Mint>,
+
+    /// CHECK: JobScheduler program id
+    #[account(address = job_scheduler::ID @ ErrorCode::InvalidJobScheduler)]
+    pub job_scheduler_program: UncheckedAccount<'info>,
 
     pub token_program: Program<'info, Token2022>,
 }
 
 #[derive(Accounts)]
 pub struct MarkMissed<'info> {
-    /// Only ProviderRegistry (via CPI) can call this
     pub provider_registry: Signer<'info>,
-    #[account(mut)]
+    #[account(mut, owner = sla_registry::ID @ ErrorCode::InvalidReceipt)]
     pub receipt: Account<'info, ReceiptAccount>,
 }
 
-// ── Imported state from other programs (simplified stubs) ────────────────────
+pub mod sla_registry {
+    use super::*;
+    declare_id!("5me7JG25p4NH1XCYtxWn9bU5sij8Xos1We5g47TbRxxM");
+}
 
-/// Minimal view of ReceiptAccount from SLARegistry
+// ── Mirrored state (must match source programs byte-for-byte) ────────────────
+
 #[account]
 pub struct ReceiptAccount {
     pub job_id: [u8; 32],
     pub sla_tier: String,
     pub ttft_ms: u32,
     pub tpot_ms: u32,
+    pub router_sig: [u8; 64],
+    pub watcher_sig: Option<[u8; 32]>,
     pub sla_met: bool,
-    pub finalized: bool,
     pub confidential: bool,
+    pub attestation_hash: Option<[u8; 32]>,
+    pub committed_at: i64,
+    pub finalized: bool,
     pub bump: u8,
 }
 
-/// Minimal view of ServingJob from JobScheduler
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, PartialEq)]
+pub enum JobStatus {
+    Pending,
+    Active,
+    Settled,
+    Expired,
+}
+
 #[account]
 pub struct ServingJob {
     pub job_id: [u8; 32],
     pub customer: Pubkey,
-    pub payment_amount: u64,
+    pub worker: Pubkey,
     pub sla_tier: String,
+    pub payment_amount: u64,
+    pub confidential: bool,
+    pub status: JobStatus,
+    pub opened_at: i64,
+    pub assigned_at: i64,
+    pub settled_at: i64,
     pub bump: u8,
 }
 
@@ -180,13 +258,12 @@ pub struct JobAbandoned {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/// Penalty = fee × multiplier per tier
 fn penalty_for_tier(tier: &str, fee: u64) -> Result<u64> {
     let mult_bps: u64 = match tier {
-        "realtime"     => 200, // 2×
-        "standard"     => 100, // 1×
-        "batch"        => 25,  // 0.25×
-        "confidential" => 100, // 1×
+        "realtime" => 200,
+        "standard" => 100,
+        "batch" => 25,
+        "confidential" => 100,
         _ => return err!(ErrorCode::UnknownSlaTier),
     };
     Ok(fee * mult_bps / 100)
@@ -202,4 +279,10 @@ pub enum ErrorCode {
     JobIdMismatch,
     #[msg("Unknown SLA tier")]
     UnknownSlaTier,
+    #[msg("Invalid receipt account owner")]
+    InvalidReceipt,
+    #[msg("Invalid job account owner")]
+    InvalidJob,
+    #[msg("Invalid job scheduler program")]
+    InvalidJobScheduler,
 }
