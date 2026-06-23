@@ -4,6 +4,7 @@ import { usePathname } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useEffect, useRef, useState } from "react";
 import { WalletIcon } from "@/components/wallet-icon";
+import { GridlockLogo } from "@/components/gridlock-logo";
 import { useBrowserWorker } from "@/context/browser-worker-context";
 
 const links = [
@@ -14,6 +15,7 @@ const links = [
   { href: "/leaderboard", label: "Leaderboard" },
   { href: "/governance",  label: "Governance" },
   { href: "/docs",        label: "Docs" },
+  { href: "/download",   label: "Download" },
 ];
 
 const WALLET_ORDER = ["Phantom", "MetaMask", "Solflare"];
@@ -101,9 +103,10 @@ export function Navbar() {
             background: "#FFFFFF",
             borderRadius: 5,
             display: "flex", alignItems: "center", justifyContent: "center",
-            fontWeight: 900, fontSize: 14, color: "#000",
             flexShrink: 0,
-          }}>G</div>
+          }}>
+            <GridlockLogo size={17} color="#000" />
+          </div>
           <span style={{
             fontWeight: 800, fontSize: 13, color: "#FFFFFF",
             letterSpacing: "2px", textTransform: "uppercase",
