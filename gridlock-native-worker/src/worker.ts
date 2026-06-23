@@ -1,4 +1,5 @@
 import WebSocket from "ws";
+import { printStartupBanner } from "./banner.js";
 import { wsUrl } from "./config.js";
 import { detectGpuName } from "./gpu.js";
 import {
@@ -60,9 +61,10 @@ function log(msg: string) {
 
 export async function startWorker(options: WorkerOptions): Promise<void> {
   const { wallet, backendUrl, benchmarkOnly, inference } = options;
-  const hardwareTier = await detectGpuName();
 
-  log(`Gridlock native worker`);
+  printStartupBanner();
+
+  const hardwareTier = await detectGpuName();
   log(`Wallet: ${wallet.slice(0, 8)}…`);
   log(`API: ${backendUrl}`);
   log(`GPU: ${hardwareTier}`);
