@@ -84,11 +84,16 @@ jobs:
           cache: npm
           cache-dependency-path: gridlock-worker/package-lock.json
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Install dependencies
         run: npm ci
 
       - name: Install Python icon deps
-        run: pip3 install pillow
+        run: pip install pillow
 
       - name: Build macOS DMG
         run: npm run package -- --mac --universal
