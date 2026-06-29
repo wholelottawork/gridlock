@@ -75,6 +75,7 @@ export const OPEN_PATHS = new Set([
   "/v1/stake/info",
   "/v1/stake/position",
   "/v1/stake/deposit/info",
+  "/v1/chat/completions",
 ]);
 
 export const PROGRAM_IDS = {

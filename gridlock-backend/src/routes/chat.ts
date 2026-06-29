@@ -6,7 +6,7 @@ import { config, computeFee, PENALTY_MULT, SLA_TARGETS } from "../config.js";
 import { billingApplies, chargeJobFee, insufficientCreditsResponse } from "../billing/credits.js";
 import { cacheSetTtl, cacheWarmCheck } from "../cache.js";
 import { dbIncrementApiKeyUsage } from "../db.js";
-import { getApiKeyContext } from "../middleware/api-key-auth.js";
+import { getApiKeyContext, resolveApiKeyContext } from "../middleware/api-key-auth.js";
 import { settleJob, watcherSample } from "../settlement.js";
 import { anchorAssignWorker, anchorOpenJob } from "../solana-settlement.js";
 import { appendJob } from "../state.js";
@@ -99,7 +99,14 @@ function finalizeAttestation(params: {
 chatRoutes.post("/v1/chat/completions", async (c) => {
   const req = (await c.req.json()) as ChatCompletionRequest;
   const jobId = randomUUID();
-  const apiKey = getApiKeyContext(c);
+
+  let apiKey = getApiKeyContext(c);
+  if (!apiKey) {
+    const token = (c.req.header("Authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
+    if (token) {
+      apiKey = (await resolveApiKeyContext(token)) ?? undefined;
+    }
+  }
 
   const slaFromRequest =
     req.gridlock?.sla && SLA_TARGETS[req.gridlock.sla] ? req.gridlock.sla : null;

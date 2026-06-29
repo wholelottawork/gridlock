@@ -20,12 +20,6 @@ import {
   loadStoredConsoleChat,
   saveStoredConsoleChat,
 } from "@/lib/conversation";
-import {
-  getActiveApiKeyId,
-  getApiKeySecret,
-  listStoredKeyIds,
-  setActiveApiKeyId,
-} from "@/lib/api-keys-storage";
 import { ApiKeysPanel } from "@/components/console/api-keys-panel";
 import { BillingPanel } from "@/components/console/billing-panel";
 
@@ -90,10 +84,6 @@ export default function ConsolePage() {
   const [playMessages, setPlayMessages] = useState<PlayMessage[]>([]);
   const [playError, setPlayError]     = useState<string | null>(null);
   const [chatHydrated, setChatHydrated] = useState(false);
-  const [keysRefresh, setKeysRefresh] = useState(0);
-  const [playApiKey, setPlayApiKey] = useState<string | null>(null);
-  const [storedKeyOptions, setStoredKeyOptions] = useState<{ id: string; label: string }[]>([]);
-  const [activeApiKeyId, setActiveApiKeyIdState] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -118,18 +108,6 @@ export default function ConsolePage() {
     if (playSla === "confidential") setPlayPrivacy(true);
   }, [playSla]);
 
-  useEffect(() => {
-    setStoredKeyOptions(
-      listStoredKeyIds().map((id) => ({
-        id,
-        label: getApiKeySecret(id)?.slice(0, 16) ?? id.slice(0, 8),
-      })),
-    );
-    const id = getActiveApiKeyId() ?? "";
-    setActiveApiKeyIdState(id);
-    setPlayApiKey(id ? getApiKeySecret(id) : null);
-  }, [keysRefresh]);
-
   async function sendPrompt() {
     if (playPrivacy && teeCapacity && !teeCapacity.can_serve_confidential) {
       setPlayError("No TEE workers online — start a worker with GRIDLOCK_TEE_CAPABLE=true or disable privacy.");
@@ -152,7 +130,6 @@ export default function ConsolePage() {
         ),
         sla: playSla,
         privacy: playPrivacy,
-        apiKey: playApiKey,
       });
       setPlayMessages((prev) => [...prev, { prompt, content, meta }]);
     } catch (e: unknown) {
@@ -262,30 +239,6 @@ export default function ConsolePage() {
 
           {/* Config */}
           <div className="card" style={{ display: "flex", gap: 20, alignItems: "flex-end", flexWrap: "wrap" }}>
-            <div style={{ flex: "1 1 220px" }}>
-              <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 7 }}>API KEY</div>
-              <select
-                value={activeApiKeyId}
-                onChange={(e) => {
-                  const id = e.target.value;
-                  setActiveApiKeyIdState(id);
-                  if (!id) {
-                    setActiveApiKeyId(null);
-                    setPlayApiKey(null);
-                  } else {
-                    setActiveApiKeyId(id);
-                    setPlayApiKey(getApiKeySecret(id));
-                  }
-                }}
-                style={selectStyle}
-              >
-                <option value="">None (dev — no auth)</option>
-                {storedKeyOptions.map((k) => (
-                  <option key={k.id} value={k.id}>{k.label}…</option>
-                ))}
-              </select>
-            </div>
-
             <div style={{ flex: "1 1 220px" }}>
               <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 7 }}>MODEL</div>
               <select value={playModel} onChange={(e) => setPlayModel(e.target.value)} style={selectStyle}>
@@ -838,7 +791,7 @@ export default function ConsolePage() {
       {/* ── API KEYS ─────────────────────────────────────────────────────────── */}
       {keysPanelReady && (
         <div style={{ display: tab === "keys" ? undefined : "none" }}>
-          <ApiKeysPanel onKeysChange={() => setKeysRefresh((n) => n + 1)} />
+          <ApiKeysPanel />
         </div>
       )}
     </motion.div>
