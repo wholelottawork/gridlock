@@ -4,12 +4,57 @@ Decentralized AI inference marketplace on Solana with enforceable latency SLAs. 
 
 **Production API:** [https://api.reacton.dev](https://api.reacton.dev)
 
+<p>
+  <strong>Frontend &nbsp;</strong>
+  <a href="https://nextjs.org"><img src="https://img.shields.io/badge/Next.js-000?style=for-the-badge&logo=nextdotjs&logoColor=white" alt="Next.js" /></a>
+  <a href="https://react.dev"><img src="https://img.shields.io/badge/React-20232A?style=for-the-badge&logo=react&logoColor=61DAFB" alt="React" /></a>
+  <a href="https://www.typescriptlang.org"><img src="https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white" alt="TypeScript" /></a>
+  <a href="https://tailwindcss.com"><img src="https://img.shields.io/badge/Tailwind-06B6D4?style=for-the-badge&logo=tailwindcss&logoColor=white" alt="Tailwind CSS" /></a>
+  <a href="https://solana.com"><img src="https://img.shields.io/badge/Solana_Wallet-9945FF?style=for-the-badge&logo=solana&logoColor=white" alt="Solana Wallet Adapter" /></a>
+  <a href="https://www.framer.com/motion"><img src="https://img.shields.io/badge/Framer_Motion-0055FF?style=for-the-badge&logo=framer&logoColor=white" alt="Framer Motion" /></a>
+</p>
+
+<p>
+  <strong>Backend &nbsp;</strong>
+  <a href="https://nodejs.org"><img src="https://img.shields.io/badge/Node.js-339933?style=for-the-badge&logo=nodedotjs&logoColor=white" alt="Node.js" /></a>
+  <a href="https://hono.dev"><img src="https://img.shields.io/badge/Hono-E36002?style=for-the-badge&logo=hono&logoColor=white" alt="Hono" /></a>
+  <a href="https://redis.io"><img src="https://img.shields.io/badge/Redis-DC382D?style=for-the-badge&logo=redis&logoColor=white" alt="Redis" /></a>
+  <a href="https://supabase.com"><img src="https://img.shields.io/badge/Supabase-3FCF8E?style=for-the-badge&logo=supabase&logoColor=white" alt="Supabase" /></a>
+  <a href="https://solana.com"><img src="https://img.shields.io/badge/web3.js-9945FF?style=for-the-badge&logo=solana&logoColor=white" alt="Solana web3.js" /></a>
+  <img src="https://img.shields.io/badge/WebSocket-010101?style=for-the-badge" alt="WebSocket" />
+</p>
+
+<p>
+  <strong>Workers &nbsp;</strong>
+  <a href="https://www.electronjs.org"><img src="https://img.shields.io/badge/Electron-47848F?style=for-the-badge&logo=electron&logoColor=white" alt="Electron" /></a>
+  <a href="https://www.python.org"><img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python" /></a>
+  <a href="https://ollama.com"><img src="https://img.shields.io/badge/Ollama-000?style=for-the-badge&logo=ollama&logoColor=white" alt="Ollama" /></a>
+  <img src="https://img.shields.io/badge/vLLM-76B900?style=for-the-badge&logo=nvidia&logoColor=white" alt="vLLM" />
+  <img src="https://img.shields.io/badge/WebGPU-0078D4?style=for-the-badge" alt="WebGPU" />
+</p>
+
+<p>
+  <strong>Blockchain &nbsp;</strong>
+  <a href="https://solana.com"><img src="https://img.shields.io/badge/Solana-9945FF?style=for-the-badge&logo=solana&logoColor=white" alt="Solana" /></a>
+  <a href="https://www.anchor-lang.com"><img src="https://img.shields.io/badge/Anchor-150?style=for-the-badge" alt="Anchor" /></a>
+  <a href="https://www.rust-lang.org"><img src="https://img.shields.io/badge/Rust-000?style=for-the-badge&logo=rust&logoColor=white" alt="Rust" /></a>
+  <img src="https://img.shields.io/badge/Token--2022-9945FF?style=for-the-badge&logo=solana&logoColor=white" alt="Token-2022" />
+</p>
+
+<p>
+  <strong>Infra &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</strong>
+  <a href="https://www.docker.com"><img src="https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker" /></a>
+  <a href="https://www.cloudflare.com"><img src="https://img.shields.io/badge/Cloudflare-F38020?style=for-the-badge&logo=cloudflare&logoColor=white" alt="Cloudflare" /></a>
+  <img src="https://img.shields.io/badge/Docker_Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker Compose" />
+</p>
+
+---
 ## Overview
 
 Gridlock combines four layers:
 
 1. **Router (`gridlock-backend`)** — Hono API: routes chat jobs, worker registry, WebSocket job dispatch, Redis KV-cache, Supabase persistence, optional Solana settlement.
-2. **Web app (`gridlock-web`)** — Next.js dashboard: Console playground, worker operator UI (Phantom wallet), job explorer, docs.
+2. **Web app (`gridlock-web`)** — Next.js dashboard: Console (playground, API keys, billing), worker operator UI, job explorer, staking, docs.
 3. **Worker clients** — Desktop (Electron), headless native CLI, or in-browser WebGPU worker. All connect to the router; inference runs locally via **Ollama** or **vLLM**.
 4. **On-chain programs (Anchor/Rust)** — Worker registration, job escrow, SLA receipts, penalties, fee distribution, governance (optional; backend can settle locally when chain is disabled).
 
@@ -27,17 +72,23 @@ The native token is **LOCK** (Token-2022), used for job fees, worker collateral,
 - **TEE / confidential jobs** — Dev attestation today; production path for TEE-capable workers
 - **Persistence** — Supabase for jobs and workers; Redis for cache (in-memory fallback)
 - **Live stream** — SSE at `/v1/live`
+- **Wallet-owned API keys** — Create, list, revoke keys from the Console; hashed at rest in Supabase
+- **Off-chain billing credits** — Per-wallet $LOCK balance, usage metering, monthly invoices, on-chain treasury deposits
+- **Wallet console sessions** — One signature → 24h session token for Billing / API Keys reads (no re-sign on every tab visit)
+- **Passive $LOCK staking** — Deposit to a per-wallet on-chain vault, earn from the staker pool; unstake with a configurable cooldown
 
 ## Tech Stack
 
-| Layer | Technologies |
-|-------|-------------|
-| Frontend | Next.js, React, Solana Wallet Adapter, Recharts |
-| Backend | Node.js, Hono, TypeScript, Redis, Supabase, `@solana/web3.js`, WebSocket (`ws`) |
-| Desktop worker | Electron, Python daemon, Ollama/vLLM, `nvidia-smi` / ROCm / WMI detection |
-| Native worker | Node.js CLI, Ollama/vLLM |
-| Blockchain | Solana, Anchor, Rust, Token-2022 |
-| Infrastructure | Docker Compose, Redis, Cloudflare Tunnel |
+The badges above summarize the main tools per layer. Additional details:
+
+| Layer | Also includes |
+|-------|----------------|
+| Frontend | Radix UI, TanStack Query, Recharts, Zustand, `@solana/spl-token` |
+| Backend | `@hono/node-server`, `@supabase/supabase-js`, SSE (`/v1/live`) |
+| Desktop worker | `nvidia-smi` / ROCm / WMI hardware detection |
+| Native worker | Headless Node.js CLI (`gridlock-native-worker`) |
+| Blockchain | Six Anchor programs (fee collector, job scheduler, SLA, governance, …) |
+| Infrastructure | Groq / self-hosted vLLM as router inference fallback |
 
 ## Prerequisites
 
@@ -152,10 +203,21 @@ See `gridlock/cloudflare/cloudflare.env.example` and `gridlock/cloudflare/setup-
 | Surface | Wallet | Purpose |
 |---------|--------|---------|
 | **Electron worker** | Public address only (typed in Settings) | Identity, registration, job routing, earnings attribution |
-| **Web `/worker`** | Phantom / Solflare connect | Operator dashboard, pause/resume, confidential mode, future claim/stake |
+| **Web `/worker`** | Phantom / Solflare connect | Operator dashboard, pause/resume, confidential mode, worker collateral |
+| **Web `/console`** | Phantom connect + message sign | API key management, billing, playground chat |
+| **Web `/stake`** | Phantom connect (reads unsigned) | View pool/position; sign only for stake/unstake actions |
 | **Backend** | Router keypair (`.env`) | Optional on-chain job settlement |
 
 The desktop app **does not** use Phantom and **must not** ask for private keys. Use the same public address on desktop and web so the worker dashboard shows one unified operator.
+
+### Console auth model
+
+Two layers keep signatures minimal:
+
+1. **Wallet session** — `POST /v1/auth/session` with a one-time `"session"` message signature returns a 24h HMAC token. Billing and API Keys **reads** use `Authorization: Bearer <session>` instead of signing again.
+2. **Action signatures** — Mutations (`create key`, `deposit`, `stake`, etc.) still require a fresh `gridlock:keys:{action}:{wallet}:{timestamp}` signature (cached ~4 minutes per action in the browser).
+
+**Public reads (no signature):** stake position via `GET /v1/stake/position?wallet=…`, stake deposit info via `GET /v1/stake/deposit/info?wallet=…`, model pricing via `GET /v1/models`, job explorer data, worker list.
 
 ## Usage
 
@@ -222,16 +284,57 @@ Response includes `ws_online`, `ws_worker_type`, `ws_busy`, and recent jobs.
 
 Workers silent for more than 120 seconds are set to `AutoGated` until the next heartbeat.
 
+### Console — API keys and billing
+
+Connect a wallet at `/console`. Key management and billing use wallet message signatures; **reads** can use a 24h session token from `POST /v1/auth/session` so you are not prompted on every tab load.
+
+**API keys**
+
+- Create keys tied to your wallet (hashed in Supabase via migration `002_api_keys.sql`).
+- Use `Authorization: Bearer gk_…` in the playground or external clients.
+- Chat requires a valid key once any keys exist in the database (or when `API_KEYS` is set in the backend env).
+
+**Billing**
+
+- Inference deducts off-chain $LOCK credits when `GRIDLOCK_BILLING_ENABLED=true`.
+- Deposit on-chain $LOCK to the treasury ATA; `POST /v1/billing/deposit/confirm` verifies the transaction and credits your balance.
+- Monthly invoices are generated automatically; see `/console` → Billing.
+- Dev test credits: `POST /v1/billing/topup` when `GRIDLOCK_BILLING_DEV_TOPUP=true`.
+
+Requires Supabase migrations `003`–`006` (see [Supabase migrations](#supabase-migrations)).
+
+### Staking
+
+Passive staking at `/stake` is separate from worker collateral (operator stake on `/worker`).
+
+1. **Deposit** — Transfer $LOCK from your wallet to your staker vault (PDA `["staker_vault", wallet]` under the FeeCollector program). Balances are read from devnet RPC; optional `POST /v1/stake/deposit/confirm` records the deposit in Supabase.
+2. **Unstake** — `POST /v1/stake/unstake/request` starts a cooldown (default 7 days, overridable via `GRIDLOCK_STAKE_COOLDOWN_SEC`).
+3. **Claim** — After cooldown, claim returns $LOCK to your wallet via the FeeCollector `claim_unstake` instruction. Enable with `GRIDLOCK_STAKING_CLAIM_ENABLED=true` after redeploying the updated FeeCollector program.
+
+Pool stats (`GET /v1/stake/info`) and your position (`GET /v1/stake/position?wallet=…`) are public reads and do not require a wallet signature.
+
+Requires migration `007_stake.sql`.
+
+**On-chain components**
+
+| Component | Notes |
+|-----------|--------|
+| `distribute_fees` → staker pool | Deployed; 60% of job fees |
+| `distribute_epoch_rewards` | In program; backend cron not wired |
+| Passive deposit (SPL → vault ATA) | Live |
+| Unstake cooldown | Tracked in Supabase |
+| Unstake claim (PDA-signed withdraw) | Requires FeeCollector redeploy |
+
 ### Web dashboard routes
 
 | Route | Purpose |
 |-------|---------|
 | `/` | Landing |
-| `/console` | Playground — chat with SLA / confidential toggles |
+| `/console` | Playground, **API Keys**, **Billing** (live wallet data) |
 | `/worker` | Operator dashboard, browser worker, native worker docs |
 | `/explorer` | Job history (live API) |
 | `/leaderboard` | Worker rankings |
-| `/stake` | LOCK staking |
+| `/stake` | Passive $LOCK staking — pool TVL, position, deposit / unstake |
 | `/governance` | DAO proposals |
 | `/docs` | API reference |
 
@@ -255,20 +358,58 @@ SOLANA_RPC_URL=https://api.devnet.solana.com
 ROUTER_KEYPAIR_PATH=~/.config/solana/id.json
 SOLANA_SETTLEMENT_ENABLED=false   # set true when vaults/mints are ready
 
-# Database (optional)
+# Database (optional — run migrations in order; see Supabase section)
 SUPABASE_URL=https://yourproject.supabase.co
 SUPABASE_KEY=your-service-role-key
 
-# Auth — comma-separated; empty = dev mode (worker routes always public)
+# Auth — comma-separated bootstrap keys; empty = dev mode for chat when no DB keys exist
 API_KEYS=
+# Dev only: trust X-Gridlock-Wallet header without signature on /v1/keys and billing
+GRIDLOCK_INSECURE_KEY_MANAGEMENT=false
+# HMAC secret for 24h console session tokens (defaults to SUPABASE_KEY in dev)
+# GRIDLOCK_WALLET_SESSION_SECRET=
+
+# Billing — off-chain $LOCK credits (set false to disable balance checks on chat)
+GRIDLOCK_BILLING_ENABLED=true
+GRIDLOCK_STARTING_CREDIT_LOCK=10
+GRIDLOCK_MIN_DEPOSIT_LOCK=1
+# Dev: POST /v1/billing/topup adds test credits (wallet-signed)
+GRIDLOCK_BILLING_DEV_TOPUP=false
+# Optional treasury LOCK ATA override (defaults to ATA of TREASURY + LOCK_MINT)
+# BILLING_DEPOSIT_VAULT=
+SOLANA_CLUSTER=devnet
+# GRIDLOCK_INVOICE_CRON_SECRET=   # protect POST /v1/billing/invoices/close-all
+
+# Staking
+GRIDLOCK_STAKING_ENABLED=true
+GRIDLOCK_MIN_STAKE_LOCK=1
+# GRIDLOCK_STAKE_COOLDOWN_SEC=604800   # 7 days; use 60 for dev
+# GRIDLOCK_STAKING_CLAIM_ENABLED=true  # after FeeCollector redeploy with claim_unstake
+
+# Solana devnet vaults (when SOLANA_SETTLEMENT_ENABLED=true)
+# LOCK_MINT=...
+# FEE_VAULT=...
+# STAKER_POOL=...
+# TREASURY=...
+# CUSTOMER_WALLET=...
 
 # Misc
 WATCHER_SAMPLE_RATE=0.05
 ```
 
-**Public without API key:** `/health`, `/v1/live`, `/v1/ws`, `/v1/network/stats`, `/v1/capacity/tee`, all `/v1/workers/*`, and `/v1/jobs/*`.
+**Public without API key:** `/health`, `/v1/live`, `/v1/ws`, `/v1/network/stats`, `/v1/capacity/tee`, `/v1/models`, `/v1/stake/info`, `/v1/stake/position`, `/v1/stake/deposit/info`, worker register/heartbeat/list, and job reads used by the explorer.
 
-Chat and customer endpoints require an API key when `API_KEYS` is set.
+Chat requires an API key when keys exist in Supabase or `API_KEYS`. Billing and key-management routes require a wallet signature or session token (unless insecure dev mode).
+
+### Web (`gridlock-web/.env.local`)
+
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:8081
+NEXT_PUBLIC_LOCK_MINT=your-devnet-lock-mint
+# Dev only — skip wallet signatures in Console
+# NEXT_PUBLIC_INSECURE_KEY_MANAGEMENT=true
+# NEXT_PUBLIC_GRIDLOCK_BILLING_DEV_TOPUP=true
+```
 
 ### Desktop worker
 
@@ -282,9 +423,22 @@ Chat and customer endpoints require an API key when `API_KEYS` is set.
 
 Router URL is hardcoded in the Electron app for production; use `GRIDLOCK_BACKEND_URL` for local backend testing.
 
-### Supabase
+### Supabase migrations
 
-Run `gridlock-backend/migrations/001_initial.sql` in the Supabase SQL editor. See `gridlock/preset/setup.md` for a Groq + Supabase + Helius preset.
+Run these **in order** in the Supabase SQL editor (or via `psql -f …`):
+
+| File | Purpose |
+|------|---------|
+| `001_initial.sql` | Jobs, workers baseline |
+| `002_jobs_extras.sql` | Job metadata extras |
+| `002_api_keys.sql` | Wallet-owned API keys (hashed) |
+| `003_billing.sql` | Customer balances, usage events |
+| `004_customer_balances.sql` | Balance column refinements |
+| `005_billing_invoices.sql` | Monthly invoices |
+| `006_billing_deposits.sql` | On-chain deposit audit trail |
+| `007_stake.sql` | Stake deposits + unstake cooldown requests |
+
+Path: `gridlock-backend/migrations/`. See `gridlock/preset/setup.md` for a Groq + Supabase + Helius preset.
 
 ## Architecture
 
@@ -363,11 +517,26 @@ Program IDs are in `gridlock/Anchor.toml`.
 | Endpoint | Description |
 |----------|-------------|
 | `GET /health` | Health, worker counts, Solana slot |
-| `POST /v1/chat/completions` | OpenAI-compatible chat (customer API key) |
+| `POST /v1/chat/completions` | OpenAI-compatible chat (API key when keys configured) |
+| `POST /v1/auth/session` | Wallet-signed → 24h console session token |
+| `GET/POST/PATCH/DELETE /v1/keys` | API key CRUD (wallet-signed) |
+| `GET /v1/billing/summary` | Credits, usage, balance (session or signature) |
+| `GET /v1/billing/invoices` | Monthly invoices |
+| `GET /v1/billing/deposit/info` | Treasury deposit addresses |
+| `POST /v1/billing/deposit/confirm` | Verify on-chain $LOCK deposit → credit balance |
+| `POST /v1/billing/topup` | Dev-only test credits |
+| `GET /v1/stake/info` | Staker pool TVL, revenue split, APY constants |
+| `GET /v1/stake/position?wallet=` | On-chain staked balance + tier (public) |
+| `GET /v1/stake/deposit/info?wallet=` | Staker vault addresses for deposit tx |
+| `POST /v1/stake/deposit/confirm` | Verify stake deposit tx |
+| `POST /v1/stake/unstake/request` | Start unstake cooldown |
+| `POST /v1/stake/unstake/claim-tx` | Unsigned claim tx (after program redeploy) |
+| `GET /v1/workers` | Worker list (public — explorer) |
 | `GET /v1/workers/:address` | Worker profile + `ws_online` + recent jobs |
 | `POST /v1/workers/register` | Register worker (public) |
 | `POST /v1/workers/heartbeat` | Heartbeat (public) |
 | `GET /v1/jobs` | Job history |
+| `GET /v1/models` | Model pricing (public — billing UI) |
 | `GET /v1/network/stats` | Network statistics |
 | `GET /v1/capacity/tee` | TEE worker capacity |
 | `GET /v1/live` | SSE job events |

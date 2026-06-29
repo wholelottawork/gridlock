@@ -14,6 +14,7 @@ pub const TREASURY_BPS: u64 = 1000; // 10%
 
 pub const INTEREST_APY_BPS: u64 = 800; // 8% APY on staked LOCK
 pub const TRANSFER_FEE_BPS: u64 = 10;  // 0.1% transfer hook
+pub const UNSTAKE_COOLDOWN_SECS: i64 = 7 * 86400;
 
 // ── Program ──────────────────────────────────────────────────────────────────
 
@@ -158,6 +159,75 @@ pub mod fee_collector {
 
         Ok(())
     }
+
+    /// Begin unstake cooldown — locks the amount until claim_unstake.
+    pub fn request_unstake(ctx: Context<RequestUnstake>, amount: u64) -> Result<()> {
+        require!(amount > 0, ErrorCode::ZeroAmount);
+        require!(
+            ctx.accounts.staker_vault.amount >= amount,
+            ErrorCode::InsufficientStake
+        );
+
+        let position = &mut ctx.accounts.stake_position;
+        if position.owner != Pubkey::default() && position.owner != ctx.accounts.owner.key() {
+            return Err(ErrorCode::Unauthorized.into());
+        }
+        require!(position.pending_unstake == 0, ErrorCode::UnstakeAlreadyPending);
+
+        let now = Clock::get()?.unix_timestamp;
+        position.owner = ctx.accounts.owner.key();
+        position.pending_unstake = amount;
+        position.unstake_available_at = now + UNSTAKE_COOLDOWN_SECS;
+        position.bump = ctx.bumps.stake_position;
+
+        emit!(UnstakeRequested {
+            owner: position.owner,
+            amount,
+            available_at: position.unstake_available_at,
+        });
+
+        Ok(())
+    }
+
+    /// After cooldown, withdraw pending unstake from the staker vault PDA.
+    pub fn claim_unstake(ctx: Context<ClaimUnstake>) -> Result<()> {
+        let position = &mut ctx.accounts.stake_position;
+        require!(position.pending_unstake > 0, ErrorCode::NoPendingUnstake);
+
+        let now = Clock::get()?.unix_timestamp;
+        require!(now >= position.unstake_available_at, ErrorCode::CooldownActive);
+
+        let amount = position.pending_unstake;
+        let owner_key = position.owner;
+        let bump = ctx.bumps.staker_vault_authority;
+        let vault_seeds: &[&[u8]] = &[b"staker_vault", owner_key.as_ref(), &[bump]];
+        let signer = &[vault_seeds];
+
+        token_interface::transfer_checked(
+            CpiContext::new_with_signer(
+                ctx.accounts.token_program.to_account_info(),
+                TransferChecked {
+                    from: ctx.accounts.staker_vault.to_account_info(),
+                    mint: ctx.accounts.lock_mint.to_account_info(),
+                    to: ctx.accounts.owner_lock_ata.to_account_info(),
+                    authority: ctx.accounts.staker_vault_authority.to_account_info(),
+                },
+                signer,
+            ),
+            amount,
+            ctx.accounts.lock_mint.decimals,
+        )?;
+
+        position.pending_unstake = 0;
+        position.unstake_available_at = 0;
+
+        emit!(UnstakeClaimed {
+            owner: owner_key,
+            amount,
+        });
+
+        Ok(())
+    }
 }
 
 // ── Accounts ─────────────────────────────────────────────────────────────────
@@ -222,6 +292,69 @@ pub struct DistributeEpochRewards<'info> {
     pub system_program: Program<'info, System>,
 }
 
+#[derive(Accounts)]
+pub struct RequestUnstake<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+
+    #[account(
+        init_if_needed,
+        payer = owner,
+        space = StakePosition::LEN,
+        seeds = [b"stake_position", owner.key().as_ref()],
+        bump,
+    )]
+    pub stake_position: Account<'info, StakePosition>,
+
+    #[account(
+        constraint = staker_vault.owner == staker_vault_authority.key() @ ErrorCode::InvalidStakerVault
+    )]
+    pub staker_vault: InterfaceAccount<'info, TokenAccount>,
+
+    /// CHECK: PDA authority for the staker vault token account
+    #[account(
+        seeds = [b"staker_vault", owner.key().as_ref()],
+        bump,
+    )]
+    pub staker_vault_authority: UncheckedAccount<'info>,
+
+    pub lock_mint: InterfaceAccount<'info, Mint>,
+    pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct ClaimUnstake<'info> {
+    #[account(mut)]
+    pub owner: Signer<'info>,
+
+    #[account(
+        mut,
+        seeds = [b"stake_position", owner.key().as_ref()],
+        bump = stake_position.bump,
+        constraint = stake_position.owner == owner.key() @ ErrorCode::Unauthorized,
+    )]
+    pub stake_position: Account<'info, StakePosition>,
+
+    /// CHECK: PDA authority for the staker vault token account
+    #[account(
+        seeds = [b"staker_vault", owner.key().as_ref()],
+        bump,
+    )]
+    pub staker_vault_authority: UncheckedAccount<'info>,
+
+    #[account(
+        mut,
+        constraint = staker_vault.owner == staker_vault_authority.key() @ ErrorCode::InvalidStakerVault
+    )]
+    pub staker_vault: InterfaceAccount<'info, TokenAccount>,
+
+    #[account(mut)]
+    pub owner_lock_ata: InterfaceAccount<'info, TokenAccount>,
+
+    pub lock_mint: InterfaceAccount<'info, Mint>,
+    pub token_program: Program<'info, Token2022>,
+}
+
 // ── State ─────────────────────────────────────────────────────────────────────
 
 #[account]
@@ -233,6 +366,18 @@ pub struct EpochState {
 
 impl EpochState {
     pub const LEN: usize = 8 + 8 + 8 + 1;
+}
+
+#[account]
+pub struct StakePosition {
+    pub owner: Pubkey,
+    pub pending_unstake: u64,
+    pub unstake_available_at: i64,
+    pub bump: u8,
+}
+
+impl StakePosition {
+    pub const LEN: usize = 8 + 32 + 8 + 8 + 1;
 }
 
 // ── Events ────────────────────────────────────────────────────────────────────
@@ -253,6 +398,19 @@ pub struct EpochRewardPaid {
     pub epoch: u64,
 }
 
+#[event]
+pub struct UnstakeRequested {
+    pub owner: Pubkey,
+    pub amount: u64,
+    pub available_at: i64,
+}
+
+#[event]
+pub struct UnstakeClaimed {
+    pub owner: Pubkey,
+    pub amount: u64,
+}
+
 // ── Errors ────────────────────────────────────────────────────────────────────
 
 #[error_code]
@@ -261,4 +419,16 @@ pub enum ErrorCode {
     ZeroAmount,
     #[msg("Epoch not yet complete — 7 days must pass between distributions")]
     EpochNotReady,
+    #[msg("Insufficient staked LOCK in vault")]
+    InsufficientStake,
+    #[msg("An unstake request is already pending")]
+    UnstakeAlreadyPending,
+    #[msg("No pending unstake to claim")]
+    NoPendingUnstake,
+    #[msg("Unstake cooldown has not finished")]
+    CooldownActive,
+    #[msg("Unauthorized")]
+    Unauthorized,
+    #[msg("Invalid staker vault for this wallet")]
+    InvalidStakerVault,
 }

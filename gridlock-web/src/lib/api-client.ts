@@ -376,8 +376,30 @@ export interface StakeInfo {
   target_apy_pct: number;
   epoch_days: number;
   staking_deposit_enabled: boolean;
+  staking_claim_enabled: boolean;
+  unstake_cooldown_days: number;
+  min_stake_lock: number;
   solana_cluster: string;
   solana_settlement_enabled: boolean;
+}
+
+export interface StakeDepositInfo {
+  lock_mint: string;
+  staker_vault_authority: string;
+  staker_vault_ata: string;
+  customer_ata: string;
+  decimals: number;
+  min_stake_lock: number;
+  cooldown_days: number;
+  cluster: string;
+}
+
+export interface StakePendingUnstake {
+  id: string;
+  amount_lock: number;
+  requested_at: string;
+  unlock_at: string;
+  claimable: boolean;
 }
 
 export interface StakePosition {
@@ -387,6 +409,7 @@ export interface StakePosition {
   staker_vault_ata: string | null;
   staker_vault_exists: boolean;
   pending_unstake_lock: number;
+  pending_unstake: StakePendingUnstake | null;
   multiplier_tier: {
     label: string;
     mult: number;
@@ -402,6 +425,39 @@ export interface StakePosition {
     sla_pass_rate?: number;
   };
   staking_deposit_enabled: boolean;
+  staking_claim_enabled: boolean;
+}
+
+export async function fetchStakeDepositInfo(wallet: string): Promise<StakeDepositInfo> {
+  const qs = new URLSearchParams({ wallet });
+  return get(`/v1/stake/deposit/info?${qs}`);
+}
+
+export async function confirmStakeDeposit(
+  auth: WalletAuthHeaders,
+  txSignature: string,
+): Promise<{ ok: boolean; staked_lock: number; total_staked_lock: number; explorer_url: string }> {
+  return post("/v1/stake/deposit/confirm", { tx_signature: txSignature }, keysHeaders(auth));
+}
+
+export async function requestStakeUnstake(
+  auth: WalletAuthHeaders,
+  amountLock: number,
+): Promise<{ ok: boolean; unlock_at: string; pending: StakePendingUnstake; cooldown_days: number }> {
+  return post("/v1/stake/unstake/request", { amount_lock: amountLock }, keysHeaders(auth));
+}
+
+export async function fetchStakeUnstakeClaimTx(
+  auth: WalletAuthHeaders,
+): Promise<{ transaction_base64: string; amount_lock: number }> {
+  return post("/v1/stake/unstake/claim-tx", {}, keysHeaders(auth));
+}
+
+export async function confirmStakeUnstakeClaim(
+  auth: WalletAuthHeaders,
+  txSignature: string,
+): Promise<{ ok: boolean; staked_lock: number; explorer_url: string }> {
+  return post("/v1/stake/unstake/confirm", { tx_signature: txSignature }, keysHeaders(auth));
 }
 
 export async function fetchStakeInfo(): Promise<StakeInfo> {

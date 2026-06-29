@@ -687,3 +687,123 @@ export async function dbListBillingWallets(): Promise<string[]> {
     return [];
   }
 }
+
+export async function dbGetStakeDepositByTx(txSignature: string): Promise<boolean> {
+  const sb = getClient();
+  if (!sb) return false;
+  try {
+    const { data, error } = await sb
+      .from("stake_deposits")
+      .select("tx_signature")
+      .eq("tx_signature", txSignature)
+      .maybeSingle();
+    if (error) throw error;
+    return Boolean(data);
+  } catch (error) {
+    console.log(`[supabase] get_stake_deposit failed: ${formatSupabaseError(error)}`);
+    return false;
+  }
+}
+
+export async function dbInsertStakeDeposit(row: {
+  tx_signature: string;
+  owner_wallet: string;
+  amount_lock: number;
+  vault_ata: string;
+}): Promise<boolean> {
+  const sb = getClient();
+  if (!sb) return true;
+  try {
+    const { error } = await sb.from("stake_deposits").insert(row);
+    if (error) {
+      if (String(error.code) === "23505") return false;
+      throw error;
+    }
+    return true;
+  } catch (error) {
+    console.log(`[supabase] insert_stake_deposit failed: ${formatSupabaseError(error)}`);
+    return false;
+  }
+}
+
+export interface StakeUnstakeRow {
+  id: string;
+  owner_wallet: string;
+  amount_lock: number;
+  requested_at: string;
+  unlock_at: string;
+  status: string;
+}
+
+export async function dbGetPendingUnstakeForWallet(
+  wallet: string,
+): Promise<StakeUnstakeRow | null> {
+  const sb = getClient();
+  if (!sb) return null;
+  try {
+    const { data, error } = await sb
+      .from("stake_unstake_requests")
+      .select("id, owner_wallet, amount_lock, requested_at, unlock_at, status")
+      .eq("owner_wallet", wallet)
+      .eq("status", "pending")
+      .order("requested_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) return null;
+    return {
+      id: String(data.id),
+      owner_wallet: String(data.owner_wallet),
+      amount_lock: Number(data.amount_lock),
+      requested_at: String(data.requested_at),
+      unlock_at: String(data.unlock_at),
+      status: String(data.status),
+    };
+  } catch (error) {
+    console.log(`[supabase] get_pending_unstake failed: ${formatSupabaseError(error)}`);
+    return null;
+  }
+}
+
+export async function dbInsertUnstakeRequest(
+  wallet: string,
+  amountLock: number,
+  unlockAt: string,
+): Promise<boolean> {
+  const sb = getClient();
+  if (!sb) return true;
+  try {
+    const { error } = await sb.from("stake_unstake_requests").insert({
+      owner_wallet: wallet,
+      amount_lock: amountLock,
+      unlock_at: unlockAt,
+      status: "pending",
+    });
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.log(`[supabase] insert_unstake_request failed: ${formatSupabaseError(error)}`);
+    return false;
+  }
+}
+
+export async function dbMarkUnstakeClaimed(id: string, claimTx: string): Promise<boolean> {
+  const sb = getClient();
+  if (!sb) return true;
+  try {
+    const { error } = await sb
+      .from("stake_unstake_requests")
+      .update({
+        status: "claimed",
+        claim_tx: claimTx,
+        claimed_at: new Date().toISOString(),
+      })
+      .eq("id", id)
+      .eq("status", "pending");
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.log(`[supabase] mark_unstake_claimed failed: ${formatSupabaseError(error)}`);
+    return false;
+  }
+}

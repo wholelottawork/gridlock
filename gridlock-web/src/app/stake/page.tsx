@@ -7,16 +7,21 @@ import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import { getAssociatedTokenAddressSync, getAccount, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
 import {
+  confirmStakeDeposit,
+  confirmStakeUnstakeClaim,
+  fetchStakeDepositInfo,
   fetchStakeInfo,
   fetchStakePosition,
+  fetchStakeUnstakeClaimTx,
+  requestStakeUnstake,
+  type StakeDepositInfo,
   type StakeInfo,
   type StakePosition,
 } from "@/lib/api-client";
+import { sendClaimUnstakeTransaction, sendLockStake } from "@/lib/lock-stake";
+import { INSECURE_KEY_MANAGEMENT, signGridlockKeysAction } from "@/lib/wallet-auth";
 
 const LOCK_MINT = process.env.NEXT_PUBLIC_LOCK_MINT ?? "";
-
-/** On-chain passive staking (deposit / unstake) — Phase C. */
-const STAKING_ACTIONS_ENABLED = false;
 
 const multiplierTiers = [
   { min: 0, max: 4999, mult: "1.0x", label: "Base", color: "var(--text-secondary)" },
@@ -43,7 +48,7 @@ function tierColor(label: string): string {
 }
 
 export default function StakePage() {
-  const { publicKey, connected } = useWallet();
+  const { publicKey, connected, signMessage, sendTransaction } = useWallet();
   const { connection } = useConnection();
   const wallet = publicKey?.toBase58() ?? null;
 
@@ -59,6 +64,26 @@ export default function StakePage() {
   const [infoLoading, setInfoLoading] = useState(true);
   const [positionLoading, setPositionLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [depositInfo, setDepositInfo] = useState<StakeDepositInfo | null>(null);
+  const [stakeBusy, setStakeBusy] = useState(false);
+  const [stakeMsg, setStakeMsg] = useState<string | null>(null);
+  const [unstakeBusy, setUnstakeBusy] = useState(false);
+  const [unstakeMsg, setUnstakeMsg] = useState<string | null>(null);
+
+  const stakingEnabled = poolInfo?.staking_deposit_enabled ?? false;
+  const claimEnabled = poolInfo?.staking_claim_enabled ?? false;
+  const minStake = poolInfo?.min_stake_lock ?? 1;
+  const cooldownDays = poolInfo?.unstake_cooldown_days ?? 7;
+
+  const signAuth = useCallback(
+    async (action: string) => {
+      if (!wallet) throw new Error("Connect your wallet first");
+      if (INSECURE_KEY_MANAGEMENT) return { wallet, timestampMs: Date.now(), signatureBase64: "" };
+      if (!signMessage) throw new Error("Your wallet does not support message signing");
+      return signGridlockKeysAction(signMessage, wallet, action);
+    },
+    [wallet, signMessage],
+  );
 
   useEffect(() => {
     setMounted(true);
@@ -78,16 +103,22 @@ export default function StakePage() {
   const loadPosition = useCallback(async () => {
     if (!wallet) {
       setPosition(null);
+      setDepositInfo(null);
       return;
     }
     setPositionLoading(true);
     setLoadError(null);
     try {
-      const pos = await fetchStakePosition(wallet);
+      const [pos, dep] = await Promise.all([
+        fetchStakePosition(wallet),
+        fetchStakeDepositInfo(wallet).catch(() => null),
+      ]);
       setPosition(pos);
+      setDepositInfo(dep);
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : "Failed to load staking position");
       setPosition(null);
+      setDepositInfo(null);
     } finally {
       setPositionLoading(false);
     }
@@ -127,6 +158,8 @@ export default function StakePage() {
   }, [publicKey, connection]);
 
   const stakedLock = position?.staked_lock ?? null;
+  const pendingUnstake = position?.pending_unstake ?? null;
+  const availableToUnstake = Math.max(0, (stakedLock ?? 0) - (position?.pending_unstake_lock ?? 0));
   const walletBalance = connected ? lockBalance : null;
   const stakeNum = parseFloat(stakeAmount) || 0;
   const previewStakeTotal = (stakedLock ?? 0) + stakeNum;
@@ -140,6 +173,95 @@ export default function StakePage() {
   const walletBalanceLive = mounted && connected && !balanceLoading && lockBalance !== null && !balanceError;
   const stakedLive = mounted && connected && !positionLoading && position != null;
 
+  async function handleStake() {
+    if (!publicKey || !depositInfo || !sendTransaction) {
+      setStakeMsg("Connect a wallet that supports transactions.");
+      return;
+    }
+    if (stakeNum < minStake) {
+      setStakeMsg(`Minimum stake is ${minStake} $LOCK`);
+      return;
+    }
+    setStakeBusy(true);
+    setStakeMsg(null);
+    try {
+      const sig = await sendLockStake({
+        connection,
+        publicKey,
+        sendTransaction,
+        lockMint: depositInfo.lock_mint,
+        stakerVaultAta: depositInfo.staker_vault_ata,
+        stakerVaultAuthority: depositInfo.staker_vault_authority,
+        amountLock: stakeNum,
+        decimals: depositInfo.decimals,
+      });
+      const auth = await signAuth("stake");
+      const res = await confirmStakeDeposit(auth, sig);
+      setStakeMsg(
+        `Staked ${res.staked_lock.toFixed(4)} $LOCK · total ${res.total_staked_lock.toFixed(4)} $LOCK`,
+      );
+      setStakeAmount("");
+      await loadPosition();
+      setLockBalance((b) => (b != null ? Math.max(0, b - stakeNum) : b));
+    } catch (e) {
+      setStakeMsg(e instanceof Error ? e.message : "Stake failed");
+    } finally {
+      setStakeBusy(false);
+    }
+  }
+
+  async function handleUnstakeRequest() {
+    const unstakeNum = parseFloat(unstakeAmount) || 0;
+    if (unstakeNum < minStake) {
+      setUnstakeMsg(`Minimum unstake is ${minStake} $LOCK`);
+      return;
+    }
+    if (unstakeNum > availableToUnstake + 0.0001) {
+      setUnstakeMsg(`Only ${availableToUnstake.toFixed(4)} $LOCK available to unstake`);
+      return;
+    }
+    setUnstakeBusy(true);
+    setUnstakeMsg(null);
+    try {
+      const auth = await signAuth("stake");
+      const res = await requestStakeUnstake(auth, unstakeNum);
+      setUnstakeMsg(
+        `Unstake of ${unstakeNum.toFixed(4)} $LOCK requested · unlocks ${new Date(res.unlock_at).toLocaleString()}`,
+      );
+      setUnstakeAmount("");
+      await loadPosition();
+    } catch (e) {
+      setUnstakeMsg(e instanceof Error ? e.message : "Unstake request failed");
+    } finally {
+      setUnstakeBusy(false);
+    }
+  }
+
+  async function handleClaimUnstake() {
+    if (!sendTransaction) {
+      setUnstakeMsg("Connect a wallet that supports transactions.");
+      return;
+    }
+    setUnstakeBusy(true);
+    setUnstakeMsg(null);
+    try {
+      const auth = await signAuth("stake");
+      const { transaction_base64, amount_lock } = await fetchStakeUnstakeClaimTx(auth);
+      const sig = await sendClaimUnstakeTransaction({
+        connection,
+        sendTransaction,
+        transactionBase64: transaction_base64,
+      });
+      const res = await confirmStakeUnstakeClaim(auth, sig);
+      setUnstakeMsg(`Claimed ${amount_lock.toFixed(4)} $LOCK · staked ${res.staked_lock.toFixed(4)} $LOCK`);
+      await loadPosition();
+    } catch (e) {
+      setUnstakeMsg(e instanceof Error ? e.message : "Claim failed");
+    } finally {
+      setUnstakeBusy(false);
+    }
+  }
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -151,7 +273,7 @@ export default function StakePage() {
         <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 4, letterSpacing: "-0.3px" }}>Stake $LOCK</h1>
         <p style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 700, lineHeight: 1.6 }}>
           Passive staking earns a share of network fees ({poolInfo?.revenue_split.stakers_pct ?? 60}% staker pool) at a
-          target {targetApy} APY. Pool balances are read from devnet; deposit / unstake ship in Phase C.
+          target {targetApy} APY. Deposits go to your on-chain staker vault; unstake has a {cooldownDays}-day cooldown.
         </p>
       </div>
 
@@ -171,7 +293,7 @@ export default function StakePage() {
         </div>
       )}
 
-      {!STAKING_ACTIONS_ENABLED && mounted && (
+      {!stakingEnabled && mounted && !infoLoading && (
         <div
           style={{
             marginBottom: 20,
@@ -184,8 +306,76 @@ export default function StakePage() {
             lineHeight: 1.6,
           }}
         >
-          <strong style={{ color: "var(--orange)" }}>Staking actions coming soon (Phase C).</strong> Pool and position
-          data below is live from the API and Solana RPC.
+          <strong style={{ color: "var(--orange)" }}>Staking deposits are disabled.</strong> Set{" "}
+          <code>LOCK_MINT</code> and <code>GRIDLOCK_STAKING_ENABLED=true</code> on the backend.
+        </div>
+      )}
+
+      {stakeMsg && (
+        <div
+          style={{
+            marginBottom: 14,
+            padding: "10px 16px",
+            borderRadius: 6,
+            background: stakeMsg.includes("failed") || stakeMsg.includes("Minimum")
+              ? "rgba(255,60,60,0.05)"
+              : "rgba(0,200,100,0.05)",
+            border: `1px solid ${stakeMsg.includes("failed") || stakeMsg.includes("Minimum") ? "rgba(255,60,60,0.2)" : "rgba(0,200,100,0.2)"}`,
+            fontSize: 12,
+            color: stakeMsg.includes("failed") || stakeMsg.includes("Minimum") ? "var(--red)" : "var(--green)",
+          }}
+        >
+          {stakeMsg}
+        </div>
+      )}
+
+      {unstakeMsg && (
+        <div
+          style={{
+            marginBottom: 14,
+            padding: "10px 16px",
+            borderRadius: 6,
+            background: unstakeMsg.includes("failed") || unstakeMsg.includes("Minimum") || unstakeMsg.includes("Only")
+              ? "rgba(255,60,60,0.05)"
+              : "rgba(0,200,100,0.05)",
+            border: `1px solid ${unstakeMsg.includes("failed") || unstakeMsg.includes("Minimum") || unstakeMsg.includes("Only") ? "rgba(255,60,60,0.2)" : "rgba(0,200,100,0.2)"}`,
+            fontSize: 12,
+            color:
+              unstakeMsg.includes("failed") || unstakeMsg.includes("Minimum") || unstakeMsg.includes("Only")
+                ? "var(--red)"
+                : "var(--green)",
+          }}
+        >
+          {unstakeMsg}
+        </div>
+      )}
+
+      {pendingUnstake && (
+        <div
+          className="card"
+          style={{ marginBottom: 20, borderColor: "rgba(255,160,0,0.25)", padding: "14px 18px" }}
+        >
+          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+            Pending unstake: {pendingUnstake.amount_lock.toLocaleString()} $LOCK
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6, marginBottom: 10 }}>
+            {pendingUnstake.claimable
+              ? "Cooldown complete — you can claim your $LOCK back to your wallet."
+              : `Unlocks ${new Date(pendingUnstake.unlock_at).toLocaleString()} (${cooldownDays}-day cooldown)`}
+            {!claimEnabled && pendingUnstake.claimable && (
+              <> · On-chain claim requires FeeCollector program redeploy.</>
+            )}
+          </div>
+          {pendingUnstake.claimable && claimEnabled && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={unstakeBusy || !connected}
+              onClick={() => void handleClaimUnstake()}
+            >
+              {unstakeBusy ? "Claiming…" : "Claim $LOCK"}
+            </button>
+          )}
         </div>
       )}
 
@@ -380,7 +570,7 @@ export default function StakePage() {
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
-        <div className="card" style={{ opacity: STAKING_ACTIONS_ENABLED ? 1 : 0.85 }}>
+        <div className="card" style={{ opacity: stakingEnabled ? 1 : 0.85 }}>
           <div
             style={{
               fontSize: 10,
@@ -402,12 +592,12 @@ export default function StakePage() {
                   placeholder="0 $LOCK"
                   type="number"
                   min="0"
-                  disabled={!STAKING_ACTIONS_ENABLED}
+                  disabled={!stakingEnabled}
                   style={{ flex: 1 }}
                 />
                 <button
                   type="button"
-                  disabled={!STAKING_ACTIONS_ENABLED || walletBalance == null}
+                  disabled={!stakingEnabled || walletBalance == null}
                   onClick={() => setStakeAmount(String(walletBalance ?? 0))}
                   style={{
                     background: "var(--bg-3)",
@@ -415,7 +605,7 @@ export default function StakePage() {
                     borderRadius: 5,
                     padding: "0 14px",
                     color: "var(--text-secondary)",
-                    cursor: STAKING_ACTIONS_ENABLED ? "pointer" : "not-allowed",
+                    cursor: stakingEnabled ? "pointer" : "not-allowed",
                     fontSize: 12,
                     fontWeight: 700,
                   }}
@@ -428,7 +618,7 @@ export default function StakePage() {
               </div>
             </div>
 
-            {STAKING_ACTIONS_ENABLED && stakeNum > 0 && (
+            {stakingEnabled && stakeNum > 0 && (
               <div
                 style={{
                   background: "var(--orange-dim)",
@@ -453,13 +643,16 @@ export default function StakePage() {
               type="button"
               className="btn btn-primary"
               style={{ width: "100%" }}
-              disabled={!STAKING_ACTIONS_ENABLED || !connected || stakeNum <= 0}
+              disabled={!stakingEnabled || !connected || stakeNum <= 0 || stakeBusy}
+              onClick={() => void handleStake()}
             >
               {!connected
                 ? "Connect Wallet to Stake"
-                : STAKING_ACTIONS_ENABLED
-                  ? "Stake $LOCK"
-                  : "Stake — coming soon"}
+                : stakeBusy
+                  ? "Staking…"
+                  : stakingEnabled
+                    ? "Stake $LOCK"
+                    : "Stake — disabled"}
             </button>
             <div style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "center" }}>
               {stakedLock && stakedLock > 0
@@ -469,7 +662,7 @@ export default function StakePage() {
           </div>
         </div>
 
-        <div className="card" style={{ opacity: STAKING_ACTIONS_ENABLED ? 1 : 0.85 }}>
+        <div className="card" style={{ opacity: stakingEnabled ? 1 : 0.85 }}>
           <div
             style={{
               fontSize: 10,
@@ -490,11 +683,12 @@ export default function StakePage() {
                 placeholder="0 $LOCK"
                 type="number"
                 min="0"
-                disabled={!STAKING_ACTIONS_ENABLED}
+                disabled={!stakingEnabled}
                 style={{ width: "100%" }}
               />
               <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 5 }}>
-                Staked: {formatLock(stakedLock, positionLoading)} $LOCK
+                Staked: {formatLock(stakedLock, positionLoading)} $LOCK · Available:{" "}
+                {formatLock(availableToUnstake, positionLoading)} $LOCK
                 {position?.pending_unstake_lock ? ` · Pending: ${position.pending_unstake_lock} $LOCK` : ""}
               </div>
             </div>
@@ -508,11 +702,11 @@ export default function StakePage() {
               }}
             >
               <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", marginBottom: 4 }}>
-                {poolInfo?.epoch_days ?? 7}-day epoch (on-chain)
+                {cooldownDays}-day cooldown
               </div>
               <div style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.6 }}>
-                Unstake with cooldown will arrive in Phase C. Epoch rewards in FeeCollector match a{" "}
-                {poolInfo?.epoch_days ?? 7}-day schedule.
+                Request unstake to start the cooldown. After it ends, claim returns $LOCK from your staker vault to your
+                wallet (requires FeeCollector program upgrade for on-chain claim).
               </div>
             </div>
 
@@ -520,13 +714,20 @@ export default function StakePage() {
               type="button"
               className="btn btn-ghost"
               style={{ width: "100%" }}
-              disabled={!STAKING_ACTIONS_ENABLED || !connected}
+              disabled={
+                !stakingEnabled || !connected || unstakeBusy || Boolean(pendingUnstake) || (parseFloat(unstakeAmount) || 0) <= 0
+              }
+              onClick={() => void handleUnstakeRequest()}
             >
               {!connected
                 ? "Connect Wallet to Unstake"
-                : STAKING_ACTIONS_ENABLED
-                  ? "Begin Unstake (7-day cooldown)"
-                  : "Unstake — coming soon"}
+                : unstakeBusy
+                  ? "Processing…"
+                  : pendingUnstake
+                    ? "Unstake pending"
+                    : stakingEnabled
+                      ? `Begin Unstake (${cooldownDays}-day cooldown)`
+                      : "Unstake — disabled"}
             </button>
           </div>
         </div>
@@ -542,7 +743,7 @@ export default function StakePage() {
             marginBottom: 8,
           }}
         >
-          EARNINGS MULTIPLIER TIERS (PLANNED)
+          EARNINGS MULTIPLIER TIERS
         </div>
         <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 16, lineHeight: 1.6 }}>
           Higher passive stake will boost your share of staker-pool rewards once multipliers are enabled on-chain.

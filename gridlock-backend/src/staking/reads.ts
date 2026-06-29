@@ -3,6 +3,7 @@ import { getAssociatedTokenAddressSync, getAccount, TOKEN_2022_PROGRAM_ID } from
 import { config, PROGRAM_IDS } from "../config.js";
 import { jobsStore, totalLockBurned, workersRegistry } from "../state.js";
 import { tryPublicKey } from "../solana.js";
+import { dbGetPendingUnstakeForWallet } from "../db.js";
 import {
   BURN_BPS,
   EPOCH_DAYS,
@@ -14,6 +15,10 @@ import {
   estimatedDailyApyLock,
   multiplierForStake,
 } from "./constants.js";
+
+export function isStakingDepositEnabled(): boolean {
+  return config.stakingEnabled && Boolean(config.lockMint);
+}
 
 function connection(): Connection {
   return new Connection(config.solanaRpcUrl, "confirmed");
@@ -88,7 +93,10 @@ export async function buildStakeInfo() {
     },
     target_apy_pct: TARGET_APY_BPS / 100,
     epoch_days: EPOCH_DAYS,
-    staking_deposit_enabled: false,
+    staking_deposit_enabled: isStakingDepositEnabled(),
+    staking_claim_enabled: config.stakingClaimEnabled,
+    unstake_cooldown_days: Math.round(config.stakeCooldownSec / 86400),
+    min_stake_lock: config.minStakeLock,
     solana_cluster: config.solanaCluster,
     solana_settlement_enabled: config.solanaSettlementEnabled,
   };
@@ -102,6 +110,8 @@ export async function buildStakePosition(wallet: string) {
 
   const worker = workersRegistry.find((w) => w.address === wallet);
   const stakedLock = vaultBalance.balance_lock;
+  const pendingRow = await dbGetPendingUnstakeForWallet(wallet);
+  const pendingUnstake = pendingRow?.amount_lock ?? 0;
   const tier = multiplierForStake(stakedLock);
 
   return {
@@ -110,7 +120,16 @@ export async function buildStakePosition(wallet: string) {
     staker_vault_authority: vault?.authority ?? null,
     staker_vault_ata: vault?.vault_ata ?? null,
     staker_vault_exists: vaultBalance.exists,
-    pending_unstake_lock: 0,
+    pending_unstake_lock: pendingUnstake,
+    pending_unstake: pendingRow
+      ? {
+          id: pendingRow.id,
+          amount_lock: pendingRow.amount_lock,
+          requested_at: pendingRow.requested_at,
+          unlock_at: pendingRow.unlock_at,
+          claimable: Date.now() >= new Date(pendingRow.unlock_at).getTime(),
+        }
+      : null,
     multiplier_tier: {
       label: tier.label,
       mult: tier.mult,
@@ -127,6 +146,7 @@ export async function buildStakePosition(wallet: string) {
           sla_pass_rate: worker.sla_pass_rate,
         }
       : { registered: false },
-    staking_deposit_enabled: false,
+    staking_deposit_enabled: isStakingDepositEnabled(),
+    staking_claim_enabled: config.stakingClaimEnabled,
   };
 }

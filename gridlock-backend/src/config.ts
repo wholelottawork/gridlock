@@ -41,6 +41,13 @@ export const config = {
   /** Treasury LOCK ATA override (defaults to ATA of TREASURY + LOCK_MINT). */
   billingDepositVault: process.env.BILLING_DEPOSIT_VAULT ?? "",
   minDepositLock: Number(process.env.GRIDLOCK_MIN_DEPOSIT_LOCK ?? "1"),
+  /** Passive staking (Phase C). */
+  stakingEnabled: process.env.GRIDLOCK_STAKING_ENABLED !== "false",
+  minStakeLock: Number(process.env.GRIDLOCK_MIN_STAKE_LOCK ?? "1"),
+  /** Unstake cooldown before claim (default 7 days; use 60 for dev). */
+  stakeCooldownSec: Number(process.env.GRIDLOCK_STAKE_COOLDOWN_SEC ?? String(7 * 86400)),
+  /** Set true after FeeCollector program is redeployed with claim_unstake. */
+  stakingClaimEnabled: process.env.GRIDLOCK_STAKING_CLAIM_ENABLED === "true",
   /** Record API key owner on job escrow metadata for on-chain correlation. */
   perCustomerEscrowTracking: process.env.GRIDLOCK_PER_CUSTOMER_ESCROW !== "false",
   /** Optional secret for POST /v1/billing/invoices/close-all (external cron). */
@@ -67,6 +74,7 @@ export const OPEN_PATHS = new Set([
   "/v1/models",
   "/v1/stake/info",
   "/v1/stake/position",
+  "/v1/stake/deposit/info",
 ]);
 
 export const PROGRAM_IDS = {
