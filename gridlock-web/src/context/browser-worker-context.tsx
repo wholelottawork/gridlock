@@ -11,7 +11,7 @@ import {
 import { useWallet } from "@solana/wallet-adapter-react";
 import { CreateMLCEngine, type MLCEngine, type InitProgressReport } from "@mlc-ai/web-llm";
 import { useWebGPU } from "@/hooks/use-webgpu";
-import { ensureWorkerRegistered, setWorkerStatus } from "@/lib/api-client";
+import { ensureWorkerRegistered, heartbeat, setWorkerStatus } from "@/lib/api-client";
 import { prepareInferenceMessages } from "@/lib/job-messages";
 import { WorkerSocketManager, type WsNetworkStats } from "@/lib/worker-socket";
 
@@ -233,6 +233,22 @@ export function BrowserWorkerProvider({ children }: { children: ReactNode }) {
       await stopWorker();
     }
   }, [walletAddr, webgpu, socket, stopWorker, status]);
+
+  // Keep HTTP heartbeat alive so the router does not AutoGate us while WS is connected.
+  useEffect(() => {
+    if (status !== "ready" && status !== "working") return;
+    const addr = activeWalletRef.current;
+    if (!addr) return;
+
+    const tick = () => {
+      void heartbeat(addr, benchmarkTokPerSec || undefined).catch(() => {
+        /* ignore transient heartbeat errors */
+      });
+    };
+    tick();
+    const id = setInterval(tick, 30_000);
+    return () => clearInterval(id);
+  }, [status, benchmarkTokPerSec]);
 
   // Stop if wallet disconnects while worker is active.
   useEffect(() => {

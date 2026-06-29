@@ -20,6 +20,14 @@ import {
   loadStoredConsoleChat,
   saveStoredConsoleChat,
 } from "@/lib/conversation";
+import {
+  getActiveApiKeyId,
+  getActiveApiKeySecret,
+  getApiKeySecret,
+  listStoredKeyIds,
+  setActiveApiKeyId,
+} from "@/lib/api-keys-storage";
+import { ApiKeysPanel } from "@/components/console/api-keys-panel";
 
 type Tab = "playground" | "overview" | "monitor" | "penalties" | "keys" | "billing" | "privacy";
 
@@ -75,6 +83,8 @@ export default function ConsolePage() {
   const [playMessages, setPlayMessages] = useState<PlayMessage[]>([]);
   const [playError, setPlayError]     = useState<string | null>(null);
   const [chatHydrated, setChatHydrated] = useState(false);
+  const [keysRefresh, setKeysRefresh] = useState(0);
+  const [playApiKey, setPlayApiKey] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -99,6 +109,15 @@ export default function ConsolePage() {
     if (playSla === "confidential") setPlayPrivacy(true);
   }, [playSla]);
 
+  useEffect(() => {
+    setPlayApiKey(getActiveApiKeySecret());
+  }, [keysRefresh, tab]);
+
+  const storedKeyOptions = listStoredKeyIds().map((id) => ({
+    id,
+    label: getApiKeySecret(id)?.slice(0, 16) ?? id.slice(0, 8),
+  }));
+
   async function sendPrompt() {
     if (playPrivacy && teeCapacity && !teeCapacity.can_serve_confidential) {
       setPlayError("No TEE workers online — start a worker with GRIDLOCK_TEE_CAPABLE=true or disable privacy.");
@@ -121,6 +140,7 @@ export default function ConsolePage() {
         ),
         sla: playSla,
         privacy: playPrivacy,
+        apiKey: playApiKey,
       });
       setPlayMessages((prev) => [...prev, { prompt, content, meta }]);
     } catch (e: unknown) {
@@ -230,6 +250,29 @@ export default function ConsolePage() {
 
           {/* Config */}
           <div className="card" style={{ display: "flex", gap: 20, alignItems: "flex-end", flexWrap: "wrap" }}>
+            <div style={{ flex: "1 1 220px" }}>
+              <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 7 }}>API KEY</div>
+              <select
+                value={getActiveApiKeyId() ?? ""}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  if (!id) {
+                    setActiveApiKeyId(null);
+                    setPlayApiKey(null);
+                  } else {
+                    setActiveApiKeyId(id);
+                    setPlayApiKey(getApiKeySecret(id));
+                  }
+                }}
+                style={selectStyle}
+              >
+                <option value="">None (dev — no auth)</option>
+                {storedKeyOptions.map((k) => (
+                  <option key={k.id} value={k.id}>{k.label}…</option>
+                ))}
+              </select>
+            </div>
+
             <div style={{ flex: "1 1 220px" }}>
               <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 7 }}>MODEL</div>
               <select value={playModel} onChange={(e) => setPlayModel(e.target.value)} style={selectStyle}>
@@ -896,46 +939,7 @@ export default function ConsolePage() {
 
       {/* ── API KEYS ─────────────────────────────────────────────────────────── */}
       {tab === "keys" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-          <div className="card">
-            <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 16 }}>API KEYS</div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {[
-                { name: "Production",  key: "gk-prod-7xKm9bNqR3tY…", tier: "realtime", tee: true,  requests: "48,291" },
-                { name: "Development", key: "gk-dev-2mPw4cVsL8kE…",  tier: "standard", tee: false, requests: "1,204" },
-              ].map((k) => (
-                <div key={k.name} style={{ display: "flex", alignItems: "center", gap: 14, background: "var(--bg-3)", borderRadius: 6, padding: "12px 16px" }}>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 2 }}>{k.name}</div>
-                    <div style={{ fontFamily: "monospace", fontSize: 12, color: "var(--text-muted)" }}>{k.key}</div>
-                  </div>
-                  <div style={{ fontSize: 11, color: "var(--text-muted)" }}>{k.requests} req</div>
-                  <span style={{ padding: "2px 8px", borderRadius: 3, background: "var(--orange-dim)", border: "1px solid var(--orange-border)", color: "var(--orange)", fontSize: 10, fontWeight: 700 }}>{k.tier.toUpperCase()}</span>
-                  {k.tee && <span style={{ padding: "2px 8px", borderRadius: 3, background: "rgba(255,255,255,0.05)", border: "1px solid var(--border-2)", color: "var(--text-secondary)", fontSize: 10, fontWeight: 700 }}>TEE</span>}
-                  <button style={{ background: "var(--bg-4)", border: "1px solid var(--border)", color: "var(--text-secondary)", borderRadius: 5, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontWeight: 600 }}>Copy</button>
-                </div>
-              ))}
-              <button className="btn btn-primary" style={{ marginTop: 8, width: "fit-content", fontSize: 13 }}>Create New Key</button>
-            </div>
-          </div>
-
-          <div className="card">
-            <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 14 }}>QUICKSTART</div>
-            <div style={{ background: "var(--bg-0)", borderRadius: 6, padding: "16px", fontFamily: "monospace", fontSize: 12, lineHeight: 1.8, color: "var(--text-secondary)" }}>
-              <div style={{ color: "var(--text-muted)" }}>npm install openai</div>
-              <br />
-              <div><span style={{ color: "#888" }}>import</span> OpenAI <span style={{ color: "#888" }}>from</span> <span style={{ color: "#aaa" }}>&apos;openai&apos;</span></div>
-              <div><span style={{ color: "#888" }}>const</span> client = <span style={{ color: "#888" }}>new</span> <span style={{ color: "#fff" }}>OpenAI</span>{"({ baseURL: 'http://localhost:8080/v1', apiKey: 'any' })"}</div>
-              <div><span style={{ color: "#888" }}>const</span> res = <span style={{ color: "#888" }}>await</span> client.chat.completions.<span style={{ color: "#fff" }}>create</span>{"({"}</div>
-              <div style={{ paddingLeft: 16 }}>model: <span style={{ color: "#aaa" }}>&apos;llama-3.1-8b-instant&apos;</span>,</div>
-              <div style={{ paddingLeft: 16 }}>messages: [{"{"} role: <span style={{ color: "#aaa" }}>&apos;user&apos;</span>, content: <span style={{ color: "#aaa" }}>&apos;Hello&apos;</span> {"}"}],</div>
-              <div style={{ paddingLeft: 16 }}>gridlock: {"{"} sla: <span style={{ color: "#aaa" }}>&apos;realtime&apos;</span> {"}"}</div>
-              <div>{"}"}</div>
-              <br />
-              <div style={{ color: "var(--text-muted)" }}>{"// res.gridlock = { ttft_ms: 187, sla_met: true, ... }"}</div>
-            </div>
-          </div>
-        </div>
+        <ApiKeysPanel onKeysChange={() => setKeysRefresh((n) => n + 1)} />
       )}
     </motion.div>
   );

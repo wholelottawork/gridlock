@@ -6,6 +6,13 @@ import { isValidSolanaPubkey } from "./solana.js";
 import { appendJob, jobsStore, setWorkersRegistry, workersRegistry } from "./state.js";
 import { slaTiersForWorker } from "./tee-capacity.js";
 import type { JobRecord, WorkerRecord } from "./types.js";
+import { workerHub } from "./ws/hub.js";
+
+/** Active in registry, or AutoGated but still connected over WebSocket. */
+export function isWorkerEligibleForJobs(worker: WorkerRecord): boolean {
+  if (worker.status === "Active") return true;
+  return worker.status === "AutoGated" && workerHub.isConnected(worker.address);
+}
 
 const HARDWARE_TIERS = ["RTX 4090", "RTX 3090", "A100 80G", "H100 SXM", "RTX 5090", "A6000"];
 const ROLES = ["Prefill", "Decode", "Cache", "Router"];
@@ -87,7 +94,7 @@ export function seedJobs(workers: WorkerRecord[]): void {
 function activeForTier(slaTier: string, confidential: boolean): WorkerRecord[] {
   let pool = workersRegistry.filter(
     (w) =>
-      w.status === "Active" &&
+      isWorkerEligibleForJobs(w) &&
       w.sla_tiers.includes(slaTier) &&
       (!confidential || w.tee_capable),
   );

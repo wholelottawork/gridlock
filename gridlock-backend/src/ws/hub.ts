@@ -1,7 +1,7 @@
 import type { WebSocket } from "ws";
 import { randomUUID } from "node:crypto";
 import { workersRegistry } from "../state.js";
-import type { Message } from "../types.js";
+import type { Message, WorkerRecord } from "../types.js";
 
 export type WorkerConnectionType = "browser" | "native" | "desktop";
 
@@ -55,6 +55,24 @@ class WorkerHub {
   private queue: QueuedJob[] = [];
   private pollWaiters = new Map<string, QueuedJob[]>();
 
+  private touchHeartbeatForWs(ws: WebSocket) {
+    for (const [addr, session] of this.sessions) {
+      if (session.ws === ws) {
+        this.touchHeartbeat(addr);
+        return;
+      }
+    }
+  }
+
+  private touchHeartbeat(address: string) {
+    const worker = workersRegistry.find((w) => w.address === address);
+    if (!worker) return;
+    worker.last_heartbeat = Date.now() / 1000;
+    if (worker.status === "AutoGated") {
+      worker.status = "Active";
+    }
+  }
+
   attach(ws: WebSocket) {
     ws.on("message", (raw) => {
       try {
@@ -94,6 +112,7 @@ class WorkerHub {
         this.failJob(msg);
         break;
       case "ping":
+        this.touchHeartbeatForWs(ws);
         this.send(ws, { type: "pong", ts: Date.now() });
         break;
       default:
@@ -127,10 +146,7 @@ class WorkerHub {
       connectedAt: Date.now(),
     };
     this.sessions.set(address, session);
-    worker.last_heartbeat = Date.now() / 1000;
-    if (worker.status === "AutoGated") {
-      worker.status = "Active";
-    }
+    this.touchHeartbeat(address);
 
     console.log(`[ws] registered ${address.slice(0, 8)}… (${session.type})`);
     this.send(ws, { type: "worker:registered", worker_address: address });
@@ -159,7 +175,10 @@ class WorkerHub {
     const session = pending.assignedAddress
       ? this.sessions.get(pending.assignedAddress)
       : undefined;
-    if (session) session.status = "idle";
+    if (session) {
+      session.status = "idle";
+      this.touchHeartbeat(session.address);
+    }
 
     const content = String(msg.response ?? msg.content ?? "");
     const tokensGenerated = Number(msg.tokens_generated ?? msg.output_tokens ?? 0);
@@ -255,7 +274,7 @@ class WorkerHub {
     }
 
     const worker = workersRegistry.find((w) => w.address === workerAddress);
-    if (!worker || worker.status !== "Active") return null;
+    if (!worker || !this.registryEligible(worker)) return null;
 
     const openIdx = this.queue.findIndex((q) => {
       if (q.assignedAddress) return false;
@@ -305,13 +324,18 @@ class WorkerHub {
     return true;
   }
 
+  private registryEligible(worker: WorkerRecord): boolean {
+    if (worker.status === "Active") return true;
+    return worker.status === "AutoGated" && this.sessions.has(worker.address);
+  }
+
   pickIdleWorker(slaTier: string, confidential = false): WsWorkerSession | null {
     const candidates = [...this.sessions.values()].filter((s) => {
       if (s.status !== "idle") return false;
       const w = workersRegistry.find((r) => r.address === s.address);
       return (
         w
-        && w.status === "Active"
+        && this.registryEligible(w)
         && w.sla_tiers.includes(slaTier)
         && (!confidential || w.tee_capable)
       );
@@ -324,7 +348,7 @@ class WorkerHub {
     const session = this.sessions.get(address);
     if (!session || session.status !== "idle") return null;
     const worker = workersRegistry.find((w) => w.address === address);
-    if (!worker || worker.status !== "Active") return null;
+    if (!worker || !this.registryEligible(worker)) return null;
     return session;
   }
 
@@ -375,7 +399,7 @@ class WorkerHub {
       const w = workersRegistry.find((r) => r.address === s.address);
       return (
         w
-        && w.status === "Active"
+        && this.registryEligible(w)
         && w.sla_tiers.includes(slaTier)
         && (!confidential || w.tee_capable)
       );

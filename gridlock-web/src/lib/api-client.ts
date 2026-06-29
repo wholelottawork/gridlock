@@ -1,4 +1,10 @@
 /** Same backend the desktop worker uses in production (api.reacton.dev). */
+import {
+  INSECURE_KEY_MANAGEMENT,
+  walletAuthHeaderRecord,
+  type WalletAuthHeaders,
+} from "./wallet-auth";
+
 export function resolveApiBaseUrl(): string {
   const fromEnv = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
   if (fromEnv) return fromEnv;
@@ -13,19 +19,64 @@ export function resolveApiBaseUrl(): string {
 
 const BASE_URL = resolveApiBaseUrl();
 
-async function get<T>(path: string): Promise<T> {
-  const res = await fetch(`${BASE_URL}${path}`, { cache: "no-store" });
-  if (!res.ok) throw new Error(`API ${path}: ${res.status}`);
+function parseApiError(res: Response, body: unknown, path: string): string {
+  const err = body as { error?: string };
+  return err.error ?? `API ${path}: ${res.status}`;
+}
+
+function apiError(res: Response, body: unknown, path: string): Error & { status: number } {
+  const err = new Error(parseApiError(res, body, path)) as Error & { status: number };
+  err.status = res.status;
+  return err;
+}
+
+async function get<T>(path: string, headers?: Record<string, string>): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    cache: "no-store",
+    headers,
+  });
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw apiError(res, body, path);
+  }
   return res.json() as Promise<T>;
 }
 
-async function post<T>(path: string, body: unknown): Promise<T> {
+async function post<T>(path: string, body: unknown, headers?: Record<string, string>): Promise<T> {
   const res = await fetch(`${BASE_URL}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`API ${path}: ${res.status}`);
+  if (!res.ok) {
+    const parsed = await res.json().catch(() => ({}));
+    throw apiError(res, parsed, path);
+  }
+  return res.json() as Promise<T>;
+}
+
+async function patch<T>(path: string, body: unknown, headers?: Record<string, string>): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...headers },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const parsed = await res.json().catch(() => ({}));
+    throw apiError(res, parsed, path);
+  }
+  return res.json() as Promise<T>;
+}
+
+async function del<T>(path: string, headers?: Record<string, string>): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    method: "DELETE",
+    headers,
+  });
+  if (!res.ok) {
+    const parsed = await res.json().catch(() => ({}));
+    throw apiError(res, parsed, path);
+  }
   return res.json() as Promise<T>;
 }
 
@@ -111,6 +162,48 @@ export interface ChatGridlockMeta {
   attestation_hash?: string | null;
 }
 
+export interface ApiKeyPublic {
+  id: string;
+  key_prefix: string;
+  owner_wallet: string;
+  name: string;
+  default_sla: "realtime" | "standard" | "batch" | "confidential";
+  tee_required: boolean;
+  allowed_ips: string[] | null;
+  request_count: number;
+  created_at: string;
+  last_used_at: string | null;
+}
+
+// ─── API Keys ────────────────────────────────────────────────────────────────
+
+function keysHeaders(auth: WalletAuthHeaders): Record<string, string> {
+  return walletAuthHeaderRecord(auth, INSECURE_KEY_MANAGEMENT);
+}
+
+export async function fetchApiKeys(auth: WalletAuthHeaders): Promise<{ keys: ApiKeyPublic[]; total: number }> {
+  return get("/v1/keys", keysHeaders(auth));
+}
+
+export async function createApiKey(
+  auth: WalletAuthHeaders,
+  body: {
+    name: string;
+    kind?: "prod" | "dev";
+    default_sla?: string;
+    tee_required?: boolean;
+  },
+): Promise<{ secret: string; key: ApiKeyPublic; message: string }> {
+  return post("/v1/keys", body, keysHeaders(auth));
+}
+
+export async function revokeApiKey(
+  auth: WalletAuthHeaders,
+  keyId: string,
+): Promise<{ ok: boolean; id: string }> {
+  return del(`/v1/keys/${keyId}`, keysHeaders(auth));
+}
+
 // ─── Chat ────────────────────────────────────────────────────────────────────
 
 /** Send a chat completion. Pass the full conversation in `messages` — workers are stateless. */
@@ -119,10 +212,14 @@ export async function chatCompletion(opts: {
   messages: { role: string; content: string }[];
   sla?: string;
   privacy?: boolean;
+  apiKey?: string | null;
 }): Promise<{ content: string; meta: ChatGridlockMeta }> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (opts.apiKey) headers.Authorization = `Bearer ${opts.apiKey}`;
+
   const res = await fetch(`${BASE_URL}/v1/chat/completions`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers,
     body: JSON.stringify({
       model: opts.model,
       messages: opts.messages,
@@ -250,7 +347,11 @@ export async function ensureWorkerRegistered(body: {
     await heartbeat(body.operator_pubkey);
     return { success: true, address: body.operator_pubkey };
   } catch (e) {
-    if (e instanceof Error && e.message.includes("404")) {
+    const status = (e as { status?: number }).status;
+    const notFound =
+      status === 404
+      || (e instanceof Error && e.message.toLowerCase().includes("not found"));
+    if (notFound) {
       return registerWorker(body);
     }
     throw e;

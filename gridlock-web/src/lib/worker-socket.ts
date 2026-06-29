@@ -72,6 +72,7 @@ export class WorkerSocketManager {
 
   private ws: WebSocket | null = null;
   private connected = false;
+  private keepaliveTimer: ReturnType<typeof setInterval> | null = null;
   private stats: WsNetworkStats | null = null;
   private onJob: JobHandler | null = null;
   private statsListeners = new Set<StatsListener>();
@@ -115,8 +116,12 @@ export class WorkerSocketManager {
     const ws = new WebSocket(wsBaseUrl());
     this.ws = ws;
 
-    ws.onopen = () => this.setConnected(true);
+    ws.onopen = () => {
+      this.setConnected(true);
+      this.startKeepalive();
+    };
     ws.onclose = () => {
+      this.stopKeepalive();
       this.ws = null;
       this.setConnected(false);
     };
@@ -152,9 +157,24 @@ export class WorkerSocketManager {
   }
 
   disconnect() {
+    this.stopKeepalive();
     this.ws?.close();
     this.ws = null;
     this.setConnected(false);
+  }
+
+  private startKeepalive() {
+    this.stopKeepalive();
+    this.keepaliveTimer = setInterval(() => {
+      safeSend(this.ws, { type: "ping" });
+    }, 30_000);
+  }
+
+  private stopKeepalive() {
+    if (this.keepaliveTimer) {
+      clearInterval(this.keepaliveTimer);
+      this.keepaliveTimer = null;
+    }
   }
 
   registerWorker(
