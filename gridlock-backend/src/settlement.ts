@@ -1,4 +1,5 @@
 import { config, PENALTY_MULT } from "./config.js";
+import { creditSlaPenalty } from "./billing/credits.js";
 import { dbInsertJob } from "./db.js";
 import { addLockBurned, broadcastEvent, jobsStore } from "./state.js";
 import type { WorkerRecord } from "./types.js";
@@ -39,6 +40,10 @@ export async function settleJob(
     job.status = "settled";
     if (!slaMet && penalty != null) job.penalty_paid = Math.round(penalty * 10000) / 10000;
     await dbInsertJob(job);
+
+    if (!slaMet && penalty != null && job.owner_wallet) {
+      await creditSlaPenalty(job.owner_wallet, penalty, jobId);
+    }
   }
 
   await onWorkerJobSettled(worker);

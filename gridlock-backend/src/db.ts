@@ -361,3 +361,170 @@ export async function dbLoadJobsForWallet(wallet: string, sinceTs: number): Prom
     return [];
   }
 }
+
+// ─── Customer credits (Phase B) ───────────────────────────────────────────────
+
+export async function dbEnsureCustomerBalance(
+  wallet: string,
+  startingCredit: number,
+): Promise<void> {
+  const sb = getClient();
+  if (!sb) return;
+  try {
+    const { data } = await sb
+      .from("customer_balances")
+      .select("owner_wallet")
+      .eq("owner_wallet", wallet)
+      .maybeSingle();
+    if (data) return;
+
+    const start = Math.max(0, startingCredit);
+    const { error: insertError } = await sb.from("customer_balances").insert({
+      owner_wallet: wallet,
+      balance_lock: start,
+    });
+    if (insertError) throw insertError;
+
+    if (start > 0) {
+      await sb.from("credit_ledger").insert({
+        owner_wallet: wallet,
+        kind: "starting_credit",
+        amount_lock: start,
+        balance_after: start,
+        note: "Welcome credits",
+      });
+    }
+  } catch (error) {
+    console.log(`[supabase] ensure_customer_balance failed: ${formatSupabaseError(error)}`);
+  }
+}
+
+export async function dbGetCustomerBalance(wallet: string): Promise<number> {
+  const sb = getClient();
+  if (!sb) return 0;
+  try {
+    const { data, error } = await sb
+      .from("customer_balances")
+      .select("balance_lock")
+      .eq("owner_wallet", wallet)
+      .maybeSingle();
+    if (error) throw error;
+    return Math.round(Number(data?.balance_lock ?? 0) * 10000) / 10000;
+  } catch (error) {
+    console.log(`[supabase] get_customer_balance failed: ${formatSupabaseError(error)}`);
+    return 0;
+  }
+}
+
+export async function dbChargeCustomer(
+  wallet: string,
+  amount: number,
+  jobId: string,
+): Promise<{ ok: boolean; balance: number }> {
+  const sb = getClient();
+  if (!sb) return { ok: false, balance: 0 };
+
+  try {
+    const { data: prior } = await sb
+      .from("credit_ledger")
+      .select("id")
+      .eq("job_id", jobId)
+      .eq("kind", "charge")
+      .maybeSingle();
+    if (prior) {
+      const balance = await dbGetCustomerBalance(wallet);
+      return { ok: true, balance };
+    }
+
+    const { data: row, error: readError } = await sb
+      .from("customer_balances")
+      .select("balance_lock")
+      .eq("owner_wallet", wallet)
+      .maybeSingle();
+    if (readError) throw readError;
+
+    const current = Number(row?.balance_lock ?? 0);
+    if (current < amount) {
+      return { ok: false, balance: Math.round(current * 10000) / 10000 };
+    }
+
+    const next = Math.round((current - amount) * 10000) / 10000;
+    const { data: after, error: writeError } = await sb
+      .from("customer_balances")
+      .update({ balance_lock: next, updated_at: new Date().toISOString() })
+      .eq("owner_wallet", wallet)
+      .gte("balance_lock", amount)
+      .select("balance_lock")
+      .maybeSingle();
+    if (writeError) throw writeError;
+    if (!after) {
+      const balance = await dbGetCustomerBalance(wallet);
+      return { ok: false, balance };
+    }
+
+    const { error: ledgerError } = await sb.from("credit_ledger").insert({
+      owner_wallet: wallet,
+      job_id: jobId,
+      kind: "charge",
+      amount_lock: -amount,
+      balance_after: Number(after.balance_lock),
+      note: "Inference fee",
+    });
+    if (ledgerError) throw ledgerError;
+
+    return { ok: true, balance: Number(after.balance_lock) };
+  } catch (error) {
+    console.log(`[supabase] charge_customer failed: ${formatSupabaseError(error)}`);
+    const balance = await dbGetCustomerBalance(wallet);
+    return { ok: false, balance };
+  }
+}
+
+export async function dbApplyCredit(
+  wallet: string,
+  amount: number,
+  jobId: string | null,
+  kind: string,
+  note: string,
+): Promise<number> {
+  const sb = getClient();
+  if (!sb) return 0;
+
+  try {
+    if (jobId) {
+      const { data: prior } = await sb
+        .from("credit_ledger")
+        .select("id")
+        .eq("job_id", jobId)
+        .eq("kind", kind)
+        .maybeSingle();
+      if (prior) return dbGetCustomerBalance(wallet);
+    }
+
+    const current = await dbGetCustomerBalance(wallet);
+    const next = Math.round((current + amount) * 10000) / 10000;
+
+    const { data: after, error } = await sb
+      .from("customer_balances")
+      .update({ balance_lock: next, updated_at: new Date().toISOString() })
+      .eq("owner_wallet", wallet)
+      .select("balance_lock")
+      .maybeSingle();
+    if (error) throw error;
+    if (!after) throw new Error("balance row missing");
+
+    await sb.from("credit_ledger").insert({
+      owner_wallet: wallet,
+      job_id: jobId,
+      kind,
+      amount_lock: amount,
+      balance_after: Number(after.balance_lock),
+      note,
+    });
+
+    return Number(after.balance_lock);
+  } catch (error) {
+    console.log(`[supabase] apply_credit failed: ${formatSupabaseError(error)}`);
+    return dbGetCustomerBalance(wallet);
+  }
+}

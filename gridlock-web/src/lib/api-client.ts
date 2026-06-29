@@ -250,6 +250,13 @@ export async function fetchBillingSummary(auth: WalletAuthHeaders): Promise<Bill
   return get("/v1/billing/summary", keysHeaders(auth));
 }
 
+export async function fetchBillingTopup(
+  auth: WalletAuthHeaders,
+  amount: number,
+): Promise<{ ok: boolean; credited: number; balance_lock: number }> {
+  return post("/v1/billing/topup", { amount }, keysHeaders(auth));
+}
+
 export async function fetchModelPricing(): Promise<{ models: ApiModelPricing[]; total: number }> {
   return get("/v1/models");
 }
@@ -278,8 +285,17 @@ export async function chatCompletion(opts: {
     }),
   });
   if (!res.ok) {
-    const err = (await res.json().catch(() => ({}))) as { error?: string; code?: string };
-    throw new Error(err.error ?? `Chat API: ${res.status}`);
+    const err = (await res.json().catch(() => ({}))) as {
+      error?: string;
+      code?: string;
+      balance_lock?: number;
+      fee_lock?: number;
+    };
+    const msg =
+      err.code === "insufficient_credits" && err.balance_lock != null && err.fee_lock != null
+        ? `${err.error ?? "Insufficient credits"} — top up in Billing tab`
+        : (err.error ?? `Chat API: ${res.status}`);
+    throw new Error(msg);
   }
   const data = await res.json();
   return {

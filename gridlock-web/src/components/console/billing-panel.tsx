@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import {
   fetchBillingSummary,
+  fetchBillingTopup,
   fetchModelPricing,
   type ApiModelPricing,
   type BillingSummary,
@@ -11,6 +12,9 @@ import {
 import { INSECURE_KEY_MANAGEMENT, signGridlockKeysAction } from "@/lib/wallet-auth";
 
 const TIER_ORDER = ["batch", "standard", "realtime", "confidential"] as const;
+const DEV_TOPUP_ENABLED =
+  process.env.NEXT_PUBLIC_GRIDLOCK_BILLING_DEV_TOPUP === "true" || INSECURE_KEY_MANAGEMENT;
+const LOW_BALANCE_THRESHOLD = 0.5;
 
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -31,6 +35,8 @@ export function BillingPanel() {
   const [models, setModels] = useState<ApiModelPricing[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [topupBusy, setTopupBusy] = useState(false);
+  const [topupMsg, setTopupMsg] = useState<string | null>(null);
 
   const signAuth = useCallback(
     async (action: string) => {
@@ -68,6 +74,21 @@ export function BillingPanel() {
     void load();
   }, [load]);
 
+  async function handleTopup(amount: number) {
+    setTopupBusy(true);
+    setTopupMsg(null);
+    try {
+      const auth = await signAuth("topup");
+      const res = await fetchBillingTopup(auth, amount);
+      setTopupMsg(`+${res.credited.toFixed(2)} $LOCK added · balance ${res.balance_lock.toFixed(2)} $LOCK`);
+      await load();
+    } catch (e) {
+      setTopupMsg(e instanceof Error ? e.message : "Top-up failed");
+    } finally {
+      setTopupBusy(false);
+    }
+  }
+
   if (!connected || !wallet) {
     return (
       <div className="card" style={{ padding: 24, textAlign: "center" }}>
@@ -100,6 +121,8 @@ export function BillingPanel() {
 
   const s = summary!;
   const empty = s.mtd_requests === 0;
+  const balance = s.credit_balance_lock;
+  const lowBalance = balance != null && balance < LOW_BALANCE_THRESHOLD;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
@@ -123,9 +146,14 @@ export function BillingPanel() {
           { label: "MTD SPEND", value: `${s.mtd_spend_lock.toFixed(2)} $LOCK`, accent: "var(--orange)" },
           {
             label: "CREDIT BALANCE",
-            value: s.credit_balance_lock != null ? `${s.credit_balance_lock.toFixed(2)} $LOCK` : "—",
-            accent: "var(--green)",
-            hint: s.credit_balance_lock == null ? "Phase B — prepaid credits" : undefined,
+            value: balance != null ? `${balance.toFixed(2)} $LOCK` : "—",
+            accent: lowBalance ? "var(--red)" : "var(--green)",
+            hint:
+              balance != null
+                ? lowBalance
+                  ? "Low balance — requests may be blocked"
+                  : "Deducted per inference request"
+                : undefined,
           },
           { label: "REQUESTS (MTD)", value: s.mtd_requests.toLocaleString(), accent: "var(--text-primary)" },
           { label: "TOKENS (MTD)", value: formatTokens(s.mtd_tokens), accent: "var(--text-secondary)" },
@@ -141,6 +169,38 @@ export function BillingPanel() {
           </div>
         ))}
       </div>
+
+      {lowBalance && (
+        <div className="card" style={{ borderColor: "var(--red)", padding: "12px 16px" }}>
+          <span style={{ fontSize: 12, color: "var(--red)", fontWeight: 700 }}>
+            Insufficient credits will return HTTP 402 on API requests. Each standard request costs ~0.05 $LOCK.
+          </span>
+        </div>
+      )}
+
+      {DEV_TOPUP_ENABLED && (
+        <div className="card">
+          <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 10 }}>
+            ADD TEST CREDITS (DEV)
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            {[10, 25, 50].map((amt) => (
+              <button
+                key={amt}
+                type="button"
+                className="btn-ghost"
+                disabled={topupBusy}
+                onClick={() => void handleTopup(amt)}
+              >
+                +{amt} $LOCK
+              </button>
+            ))}
+          </div>
+          {topupMsg && (
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 10 }}>{topupMsg}</div>
+          )}
+        </div>
+      )}
 
       {s.penalties_credited_lock > 0 && (
         <div className="card" style={{ borderColor: "var(--green)", padding: "12px 16px" }}>

@@ -3,6 +3,7 @@ import { Hono } from "hono";
 import { streamSSE } from "hono/streaming";
 import { resolveJobAttestation, slaMetWithAttestation } from "../attestation.js";
 import { config, computeFee, PENALTY_MULT, SLA_TARGETS } from "../config.js";
+import { billingApplies, chargeJobFee, insufficientCreditsResponse } from "../billing/credits.js";
 import { cacheSetTtl, cacheWarmCheck } from "../cache.js";
 import { dbIncrementApiKeyUsage } from "../db.js";
 import { getApiKeyContext } from "../middleware/api-key-auth.js";
@@ -120,6 +121,14 @@ chatRoutes.post("/v1/chat/completions", async (c) => {
 
   if (apiKey?.source === "database") {
     void dbIncrementApiKeyUsage(apiKey.id);
+  }
+
+  if (billingApplies(apiKey)) {
+    const wallet = apiKey!.owner_wallet;
+    const charge = await chargeJobFee(wallet, fee, jobId);
+    if (!charge.ok) {
+      return c.json(insufficientCreditsResponse(charge.balance, fee), 402);
+    }
   }
 
   const prefixKey = hashPrefix(prompt);

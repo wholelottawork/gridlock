@@ -49,7 +49,7 @@ export interface BillingSummary {
   mtd_requests: number;
   mtd_tokens: number;
   penalties_credited_lock: number;
-  credit_balance_lock: null;
+  credit_balance_lock: number | null;
   by_tier: BillingTierRow[];
   by_model: BillingModelRow[];
   by_api_key: BillingKeyRow[];

@@ -30,6 +30,12 @@ export const config = {
   watcherSampleRate: Number(process.env.WATCHER_SAMPLE_RATE ?? "0.05"),
   /** Dev only: skip wallet signatures on /v1/keys (trust X-Gridlock-Wallet header). */
   insecureKeyManagement: process.env.GRIDLOCK_INSECURE_KEY_MANAGEMENT === "true",
+  /** Deduct $LOCK credits for DB-owned API keys before serving inference. */
+  billingEnabled: process.env.GRIDLOCK_BILLING_ENABLED !== "false",
+  /** Credits granted when a wallet row is first created. */
+  startingCreditLock: Number(process.env.GRIDLOCK_STARTING_CREDIT_LOCK ?? "10"),
+  /** Dev: allow POST /v1/billing/topup to add test credits (wallet-signed). */
+  billingDevTopup: process.env.GRIDLOCK_BILLING_DEV_TOPUP === "true",
   apiKeys: new Set(
     (process.env.API_KEYS ?? "")
       .split(",")
