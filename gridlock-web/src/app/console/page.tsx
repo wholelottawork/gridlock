@@ -22,7 +22,6 @@ import {
 } from "@/lib/conversation";
 import {
   getActiveApiKeyId,
-  getActiveApiKeySecret,
   getApiKeySecret,
   listStoredKeyIds,
   setActiveApiKeyId,
@@ -73,6 +72,13 @@ function SlaResult({ met }: { met: boolean }) {
 
 export default function ConsolePage() {
   const [tab, setTab] = useState<Tab>("playground");
+  const [keysPanelReady, setKeysPanelReady] = useState(false);
+  const [billingPanelReady, setBillingPanelReady] = useState(false);
+
+  useEffect(() => {
+    if (tab === "keys") setKeysPanelReady(true);
+    if (tab === "billing") setBillingPanelReady(true);
+  }, [tab]);
 
   // ── Playground state ─────────────────────────────────────────────────────
   const [playModel, setPlayModel]     = useState(MODELS[0].value);
@@ -86,6 +92,8 @@ export default function ConsolePage() {
   const [chatHydrated, setChatHydrated] = useState(false);
   const [keysRefresh, setKeysRefresh] = useState(0);
   const [playApiKey, setPlayApiKey] = useState<string | null>(null);
+  const [storedKeyOptions, setStoredKeyOptions] = useState<{ id: string; label: string }[]>([]);
+  const [activeApiKeyId, setActiveApiKeyIdState] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -111,13 +119,16 @@ export default function ConsolePage() {
   }, [playSla]);
 
   useEffect(() => {
-    setPlayApiKey(getActiveApiKeySecret());
-  }, [keysRefresh, tab]);
-
-  const storedKeyOptions = listStoredKeyIds().map((id) => ({
-    id,
-    label: getApiKeySecret(id)?.slice(0, 16) ?? id.slice(0, 8),
-  }));
+    setStoredKeyOptions(
+      listStoredKeyIds().map((id) => ({
+        id,
+        label: getApiKeySecret(id)?.slice(0, 16) ?? id.slice(0, 8),
+      })),
+    );
+    const id = getActiveApiKeyId() ?? "";
+    setActiveApiKeyIdState(id);
+    setPlayApiKey(id ? getApiKeySecret(id) : null);
+  }, [keysRefresh]);
 
   async function sendPrompt() {
     if (playPrivacy && teeCapacity && !teeCapacity.can_serve_confidential) {
@@ -254,9 +265,10 @@ export default function ConsolePage() {
             <div style={{ flex: "1 1 220px" }}>
               <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 7 }}>API KEY</div>
               <select
-                value={getActiveApiKeyId() ?? ""}
+                value={activeApiKeyId}
                 onChange={(e) => {
                   const id = e.target.value;
+                  setActiveApiKeyIdState(id);
                   if (!id) {
                     setActiveApiKeyId(null);
                     setPlayApiKey(null);
@@ -817,11 +829,17 @@ export default function ConsolePage() {
       })()}
 
       {/* ── BILLING ──────────────────────────────────────────────────────────── */}
-      {tab === "billing" && <BillingPanel />}
+      {billingPanelReady && (
+        <div style={{ display: tab === "billing" ? undefined : "none" }}>
+          <BillingPanel />
+        </div>
+      )}
 
       {/* ── API KEYS ─────────────────────────────────────────────────────────── */}
-      {tab === "keys" && (
-        <ApiKeysPanel onKeysChange={() => setKeysRefresh((n) => n + 1)} />
+      {keysPanelReady && (
+        <div style={{ display: tab === "keys" ? undefined : "none" }}>
+          <ApiKeysPanel onKeysChange={() => setKeysRefresh((n) => n + 1)} />
+        </div>
       )}
     </motion.div>
   );

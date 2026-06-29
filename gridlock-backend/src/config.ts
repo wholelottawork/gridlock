@@ -38,6 +38,18 @@ export const config = {
   startingCreditLock: Number(process.env.GRIDLOCK_STARTING_CREDIT_LOCK ?? "10"),
   /** Dev: allow POST /v1/billing/topup to add test credits (wallet-signed). */
   billingDevTopup: process.env.GRIDLOCK_BILLING_DEV_TOPUP === "true",
+  /** Treasury LOCK ATA override (defaults to ATA of TREASURY + LOCK_MINT). */
+  billingDepositVault: process.env.BILLING_DEPOSIT_VAULT ?? "",
+  minDepositLock: Number(process.env.GRIDLOCK_MIN_DEPOSIT_LOCK ?? "1"),
+  /** Record API key owner on job escrow metadata for on-chain correlation. */
+  perCustomerEscrowTracking: process.env.GRIDLOCK_PER_CUSTOMER_ESCROW !== "false",
+  /** Optional secret for POST /v1/billing/invoices/close-all (external cron). */
+  invoiceCronSecret: process.env.GRIDLOCK_INVOICE_CRON_SECRET ?? "",
+  /** HMAC secret for wallet console session tokens (24h read access). */
+  walletSessionSecret:
+    process.env.GRIDLOCK_WALLET_SESSION_SECRET
+    ?? process.env.SUPABASE_KEY
+    ?? "gridlock-dev-wallet-session",
   apiKeys: new Set(
     (process.env.API_KEYS ?? "")
       .split(",")
@@ -46,7 +58,14 @@ export const config = {
   ),
 };
 
-export const OPEN_PATHS = new Set(["/health", "/v1/live", "/v1/ws", "/v1/capacity/tee", "/v1/network/stats"]);
+export const OPEN_PATHS = new Set([
+  "/health",
+  "/v1/live",
+  "/v1/ws",
+  "/v1/capacity/tee",
+  "/v1/network/stats",
+  "/v1/models",
+]);
 
 export const PROGRAM_IDS = {
   providerRegistry: "GvCMygAV4RNYVgPybMmgEb36AkSKEBQJJw45WfUfSfmu",

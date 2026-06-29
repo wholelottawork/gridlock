@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { generateApiKeySecret, isValidSlaTier } from "../api-keys/crypto.js";
-import { resolveWallet } from "../api-keys/resolve-wallet.js";
+import { resolveWallet, resolveWalletRead } from "../api-keys/resolve-wallet.js";
 import {
   dbGetApiKeyById,
   dbInsertApiKey,
@@ -14,11 +14,13 @@ import type { CreateApiKeyRequest, UpdateApiKeyRequest } from "../types.js";
 
 export const keyRoutes = new Hono();
 
+const KEYS_READ_ACTIONS = ["keys", "list", "session"] as const;
+
 keyRoutes.get("/v1/keys", async (c) => {
   if (!supabaseConfigured()) {
     return c.json({ error: "API key storage not configured (Supabase required)" }, 503);
   }
-  const auth = resolveWallet(c, "list");
+  const auth = resolveWalletRead(c, KEYS_READ_ACTIONS);
   if ("error" in auth) return c.json({ error: auth.error }, 401);
 
   const keys = await dbListApiKeysByWallet(auth.wallet);

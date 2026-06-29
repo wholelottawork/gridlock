@@ -108,6 +108,37 @@ export async function topupCredits(wallet: string, amount: number): Promise<numb
   return round4(memBalances.get(wallet)!);
 }
 
+const memDeposits = new Set<string>();
+
+export async function creditFromOnChainDeposit(
+  wallet: string,
+  amount: number,
+  txSignature: string,
+): Promise<number> {
+  const credit = round4(amount);
+  if (credit <= 0) return getCreditBalance(wallet);
+
+  if (memDeposits.has(txSignature)) {
+    return getCreditBalance(wallet);
+  }
+
+  if (supabaseConfigured()) {
+    await dbEnsureCustomerBalance(wallet, 0);
+    const balance = await dbApplyCredit(
+      wallet,
+      credit,
+      null,
+      "deposit",
+      `On-chain deposit ${txSignature.slice(0, 8)}…`,
+    );
+    return balance;
+  }
+
+  memDeposits.add(txSignature);
+  memBalances.set(wallet, round4(ensureMemBalance(wallet) + credit));
+  return round4(memBalances.get(wallet)!);
+}
+
 export function insufficientCreditsResponse(balance: number, fee: number) {
   return {
     error: `Insufficient $LOCK credit balance (${balance.toFixed(4)} available, ${fee.toFixed(4)} required)`,

@@ -30,7 +30,7 @@ function isWorkerPublicPath(path: string): boolean {
 }
 
 function isKeyManagementPath(path: string): boolean {
-  return path.startsWith("/v1/keys") || path.startsWith("/v1/billing");
+  return path.startsWith("/v1/keys") || path.startsWith("/v1/billing") || path.startsWith("/v1/auth");
 }
 
 export async function authRequired(): Promise<boolean> {

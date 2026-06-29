@@ -45,6 +45,7 @@ export interface JobRecord {
   prompt_tokens?: number;
   completion_tokens?: number;
   settlement_tx?: string | null;
+  escrow_customer_wallet?: string | null;
 }
 
 export interface BillingInvoiceRecord {

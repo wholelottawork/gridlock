@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import {
   createApiKey,
-  fetchApiKeys,
+  fetchApiKeysWithSession,
   resolveApiBaseUrl,
   revokeApiKey,
   type ApiKeyPublic,
@@ -15,7 +15,14 @@ import {
   saveApiKeySecret,
   setActiveApiKeyId,
 } from "@/lib/api-keys-storage";
+import {
+  getCachedApiKeys,
+  invalidateApiKeysCache,
+  setCachedApiKeys,
+} from "@/lib/api-keys-list-cache";
+import { useWalletSession } from "@/context/wallet-session-context";
 import { INSECURE_KEY_MANAGEMENT, signGridlockKeysAction } from "@/lib/wallet-auth";
+import { clearWalletSession, isSessionAuthError } from "@/lib/wallet-session";
 
 const SLA_OPTIONS = ["realtime", "standard", "batch", "confidential"] as const;
 
@@ -25,10 +32,12 @@ type Props = {
 
 export function ApiKeysPanel({ onKeysChange }: Props) {
   const { publicKey, connected, signMessage } = useWallet();
+  const { ensureSession } = useWalletSession();
   const wallet = publicKey?.toBase58() ?? null;
 
   const [keys, setKeys] = useState<ApiKeyPublic[]>([]);
   const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -51,27 +60,61 @@ export function ApiKeysPanel({ onKeysChange }: Props) {
     [wallet, signMessage],
   );
 
-  const loadKeys = useCallback(async () => {
+  const loadKeys = useCallback(async (opts?: { background?: boolean }) => {
     if (!wallet) {
       setKeys([]);
+      setLoaded(false);
       return;
     }
-    setLoading(true);
+    const cached = getCachedApiKeys(wallet);
+    if (!opts?.background && !cached) setLoading(true);
     setError(null);
     try {
-      const auth = await signAuth("list");
-      const res = await fetchApiKeys(auth);
+      let token = await ensureSession();
+      let res;
+      try {
+        res = await fetchApiKeysWithSession(wallet, token);
+      } catch (e) {
+        if (isSessionAuthError(e)) {
+          clearWalletSession();
+          token = await ensureSession();
+          res = await fetchApiKeysWithSession(wallet, token);
+        } else {
+          throw e;
+        }
+      }
       setKeys(res.keys);
+      setCachedApiKeys(wallet, res.keys);
+      setLoaded(true);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load API keys");
+      const message = e instanceof Error ? e.message : "Failed to load API keys";
+      if (!cached) {
+        setError(message);
+        setLoaded(true);
+      }
     } finally {
       setLoading(false);
     }
-  }, [wallet, signAuth]);
+  }, [wallet, ensureSession]);
 
   useEffect(() => {
+    if (!wallet) {
+      setKeys([]);
+      setLoaded(false);
+      setError(null);
+      return;
+    }
+    if (!INSECURE_KEY_MANAGEMENT && !signMessage) return;
+
+    const cached = getCachedApiKeys(wallet);
+    if (cached) {
+      setKeys(cached);
+      setLoaded(true);
+      void loadKeys({ background: true });
+      return;
+    }
     void loadKeys();
-  }, [loadKeys]);
+  }, [wallet, signMessage, loadKeys]);
 
   async function handleCreate() {
     if (!newName.trim()) return;
@@ -90,6 +133,7 @@ export function ApiKeysPanel({ onKeysChange }: Props) {
       setRevealedSecret(res.secret);
       setShowCreate(false);
       setNewName("");
+      invalidateApiKeysCache(wallet ?? undefined);
       await loadKeys();
       onKeysChange?.();
     } catch (e) {
@@ -107,6 +151,7 @@ export function ApiKeysPanel({ onKeysChange }: Props) {
       const auth = await signAuth("revoke");
       await revokeApiKey(auth, id);
       removeApiKeySecret(id);
+      invalidateApiKeysCache(wallet ?? undefined);
       await loadKeys();
       onKeysChange?.();
     } catch (e) {
@@ -154,8 +199,19 @@ export function ApiKeysPanel({ onKeysChange }: Props) {
       <div className="card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
           <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px" }}>API KEYS</div>
-          <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "monospace" }}>
-            {wallet.slice(0, 4)}…{wallet.slice(-4)}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <button
+              type="button"
+              className="btn-ghost"
+              style={{ fontSize: 11, padding: "4px 10px" }}
+              onClick={() => void loadKeys()}
+              disabled={loading}
+            >
+              {loading ? "Refreshing…" : "Refresh"}
+            </button>
+            <div style={{ fontSize: 10, color: "var(--text-muted)", fontFamily: "monospace" }}>
+              {wallet.slice(0, 4)}…{wallet.slice(-4)}
+            </div>
           </div>
         </div>
 
@@ -211,11 +267,14 @@ export function ApiKeysPanel({ onKeysChange }: Props) {
           </div>
         )}
 
-        {loading && keys.length === 0 ? (
+        {!loaded ? (
           <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "12px 0" }}>Loading keys…</div>
         ) : keys.length === 0 ? (
-          <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "8px 0 16px" }}>
-            No API keys yet. Create one to authenticate chat requests.
+          <div style={{ fontSize: 13, color: "var(--text-muted)", padding: "8px 0 16px", lineHeight: 1.6 }}>
+            No API keys for this wallet yet. Create one to authenticate chat requests.
+            <div style={{ marginTop: 8, fontSize: 11 }}>
+              Keys are scoped to the connected wallet ({wallet.slice(0, 4)}…{wallet.slice(-4)}).
+            </div>
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 8 }}>

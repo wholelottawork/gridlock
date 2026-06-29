@@ -181,6 +181,29 @@ function keysHeaders(auth: WalletAuthHeaders): Record<string, string> {
   return walletAuthHeaderRecord(auth, INSECURE_KEY_MANAGEMENT);
 }
 
+function sessionReadHeaders(wallet: string, sessionToken: string): Record<string, string> {
+  if (INSECURE_KEY_MANAGEMENT) {
+    return walletAuthHeaderRecord(
+      { wallet, timestampMs: Date.now(), signatureBase64: "" },
+      true,
+    );
+  }
+  return { Authorization: `Bearer ${sessionToken}` };
+}
+
+export async function createWalletSession(
+  auth: WalletAuthHeaders,
+): Promise<{ token: string; expires_at: number; wallet: string }> {
+  return post("/v1/auth/session", {}, keysHeaders(auth));
+}
+
+export async function fetchApiKeysWithSession(
+  wallet: string,
+  sessionToken: string,
+): Promise<{ keys: ApiKeyPublic[]; total: number }> {
+  return get("/v1/keys", sessionReadHeaders(wallet, sessionToken));
+}
+
 export async function fetchApiKeys(auth: WalletAuthHeaders): Promise<{ keys: ApiKeyPublic[]; total: number }> {
   return get("/v1/keys", keysHeaders(auth));
 }
@@ -246,6 +269,31 @@ export interface ApiModelPricing {
   tier_multipliers: Record<string, number>;
 }
 
+export async function fetchBillingSummaryWithSession(
+  wallet: string,
+  sessionToken: string,
+): Promise<BillingSummary> {
+  return get("/v1/billing/summary", sessionReadHeaders(wallet, sessionToken));
+}
+
+export async function fetchBillingInvoicesWithSession(
+  wallet: string,
+  sessionToken: string,
+): Promise<{
+  invoices: BillingInvoice[];
+  total: number;
+  solana_cluster: string;
+}> {
+  return get("/v1/billing/invoices", sessionReadHeaders(wallet, sessionToken));
+}
+
+export async function fetchBillingDepositInfoWithSession(
+  wallet: string,
+  sessionToken: string,
+): Promise<BillingDepositInfo> {
+  return get("/v1/billing/deposit/info", sessionReadHeaders(wallet, sessionToken));
+}
+
 export async function fetchBillingSummary(auth: WalletAuthHeaders): Promise<BillingSummary> {
   return get("/v1/billing/summary", keysHeaders(auth));
 }
@@ -280,6 +328,27 @@ export async function fetchBillingInvoices(auth: WalletAuthHeaders): Promise<{
   solana_cluster: string;
 }> {
   return get("/v1/billing/invoices", keysHeaders(auth));
+}
+
+export interface BillingDepositInfo {
+  lock_mint: string;
+  deposit_vault: string;
+  treasury_owner: string;
+  customer_ata: string;
+  decimals: number;
+  min_deposit_lock: number;
+  cluster: string;
+}
+
+export async function fetchBillingDepositInfo(auth: WalletAuthHeaders): Promise<BillingDepositInfo> {
+  return get("/v1/billing/deposit/info", keysHeaders(auth));
+}
+
+export async function confirmBillingDeposit(
+  auth: WalletAuthHeaders,
+  txSignature: string,
+): Promise<{ ok: boolean; credited: number; balance_lock: number; explorer_url: string }> {
+  return post("/v1/billing/deposit/confirm", { tx_signature: txSignature }, keysHeaders(auth));
 }
 
 export async function fetchModelPricing(): Promise<{ models: ApiModelPricing[]; total: number }> {

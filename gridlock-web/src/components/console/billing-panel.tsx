@@ -1,17 +1,23 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useConnection, useWallet } from "@solana/wallet-adapter-react";
 import {
-  fetchBillingInvoices,
-  fetchBillingSummary,
+  confirmBillingDeposit,
+  fetchBillingDepositInfoWithSession,
+  fetchBillingInvoicesWithSession,
+  fetchBillingSummaryWithSession,
   fetchBillingTopup,
   fetchModelPricing,
   type ApiModelPricing,
+  type BillingDepositInfo,
   type BillingInvoice,
   type BillingSummary,
 } from "@/lib/api-client";
+import { sendLockDeposit } from "@/lib/lock-deposit";
+import { useWalletSession } from "@/context/wallet-session-context";
 import { INSECURE_KEY_MANAGEMENT, signGridlockKeysAction } from "@/lib/wallet-auth";
+import { clearWalletSession, isSessionAuthError } from "@/lib/wallet-session";
 
 const TIER_ORDER = ["batch", "standard", "realtime", "confidential"] as const;
 const DEV_TOPUP_ENABLED =
@@ -46,16 +52,21 @@ function tierPrice(model: ApiModelPricing, tier: string): string {
 }
 
 export function BillingPanel() {
-  const { publicKey, connected, signMessage } = useWallet();
+  const { publicKey, connected, signMessage, sendTransaction } = useWallet();
+  const { ensureSession } = useWalletSession();
+  const { connection } = useConnection();
   const wallet = publicKey?.toBase58() ?? null;
 
   const [summary, setSummary] = useState<BillingSummary | null>(null);
   const [invoices, setInvoices] = useState<BillingInvoice[]>([]);
   const [models, setModels] = useState<ApiModelPricing[]>([]);
+  const [depositInfo, setDepositInfo] = useState<BillingDepositInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [topupBusy, setTopupBusy] = useState(false);
   const [topupMsg, setTopupMsg] = useState<string | null>(null);
+  const [depositBusy, setDepositBusy] = useState(false);
+  const [depositMsg, setDepositMsg] = useState<string | null>(null);
 
   const signAuth = useCallback(
     async (action: string) => {
@@ -75,22 +86,40 @@ export function BillingPanel() {
     setLoading(true);
     setError(null);
     try {
-      const auth = await signAuth("summary");
-      const invoiceAuth = await signAuth("invoices");
-      const [billing, invoiceRes, pricing] = await Promise.all([
-        fetchBillingSummary(auth),
-        fetchBillingInvoices(invoiceAuth),
-        fetchModelPricing(),
-      ]);
+      let token = await ensureSession();
+      const fetchReads = async (sessionToken: string) =>
+        Promise.all([
+          fetchBillingSummaryWithSession(wallet, sessionToken),
+          fetchBillingInvoicesWithSession(wallet, sessionToken),
+          fetchModelPricing().catch(() => ({ models: [], total: 0 })),
+          fetchBillingDepositInfoWithSession(wallet, sessionToken).catch(() => null),
+        ]);
+
+      let billing: BillingSummary;
+      let invoiceRes: Awaited<ReturnType<typeof fetchBillingInvoicesWithSession>>;
+      let pricing: Awaited<ReturnType<typeof fetchModelPricing>>;
+      let deposit: BillingDepositInfo | null;
+      try {
+        [billing, invoiceRes, pricing, deposit] = await fetchReads(token);
+      } catch (e) {
+        if (isSessionAuthError(e)) {
+          clearWalletSession();
+          token = await ensureSession();
+          [billing, invoiceRes, pricing, deposit] = await fetchReads(token);
+        } else {
+          throw e;
+        }
+      }
       setSummary(billing);
       setInvoices(invoiceRes.invoices);
       setModels(pricing.models);
+      setDepositInfo(deposit);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load billing");
     } finally {
       setLoading(false);
     }
-  }, [wallet, signAuth]);
+  }, [wallet, ensureSession]);
 
   useEffect(() => {
     void load();
@@ -111,6 +140,36 @@ export function BillingPanel() {
     }
   }
 
+  async function handleDeposit(amount: number) {
+    if (!publicKey || !depositInfo || !sendTransaction) {
+      setDepositMsg("Connect a wallet that supports transactions.");
+      return;
+    }
+    setDepositBusy(true);
+    setDepositMsg(null);
+    try {
+      const sig = await sendLockDeposit({
+        connection,
+        publicKey,
+        sendTransaction,
+        lockMint: depositInfo.lock_mint,
+        depositVault: depositInfo.deposit_vault,
+        amountLock: amount,
+        decimals: depositInfo.decimals,
+      });
+      const auth = await signAuth("deposit");
+      const res = await confirmBillingDeposit(auth, sig);
+      setDepositMsg(
+        `Deposited ${res.credited.toFixed(2)} $LOCK · balance ${res.balance_lock.toFixed(2)} $LOCK`,
+      );
+      await load();
+    } catch (e) {
+      setDepositMsg(e instanceof Error ? e.message : "Deposit failed");
+    } finally {
+      setDepositBusy(false);
+    }
+  }
+
   if (!connected || !wallet) {
     return (
       <div className="card" style={{ padding: 24, textAlign: "center" }}>
@@ -122,7 +181,18 @@ export function BillingPanel() {
     );
   }
 
-  if (loading && !summary) {
+  if (error && !summary) {
+    return (
+      <div className="card" style={{ padding: 24 }}>
+        <div style={{ color: "var(--red)", fontSize: 13, marginBottom: 12 }}>{error}</div>
+        <button type="button" className="btn btn-primary" onClick={() => void load()}>
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (!summary) {
     return (
       <div className="card" style={{ padding: 24, textAlign: "center", color: "var(--text-muted)" }}>
         Loading billing…
@@ -130,18 +200,7 @@ export function BillingPanel() {
     );
   }
 
-  if (error && !summary) {
-    return (
-      <div className="card" style={{ padding: 24 }}>
-        <div style={{ color: "var(--red)", fontSize: 13, marginBottom: 12 }}>{error}</div>
-        <button type="button" className="btn-primary" onClick={() => void load()}>
-          Retry
-        </button>
-      </div>
-    );
-  }
-
-  const s = summary!;
+  const s = summary;
   const empty = s.mtd_requests === 0;
   const balance = s.credit_balance_lock;
   const lowBalance = balance != null && balance < LOW_BALANCE_THRESHOLD;
@@ -154,8 +213,8 @@ export function BillingPanel() {
         </div>
         <button
           type="button"
-          className="btn-ghost"
-          style={{ fontSize: 11, padding: "4px 10px" }}
+          className="btn btn-ghost"
+          style={{ fontSize: 12, padding: "6px 12px" }}
           onClick={() => void load()}
           disabled={loading}
         >
@@ -200,6 +259,35 @@ export function BillingPanel() {
         </div>
       )}
 
+      {depositInfo && (
+        <div className="card">
+          <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 10 }}>
+            DEPOSIT $LOCK (ON-CHAIN → CREDITS)
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12 }}>
+            Send $LOCK to the treasury vault — credits apply automatically after confirmation.
+            Min {depositInfo.min_deposit_lock} $LOCK.
+          </div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            {[5, 10, 25].map((amt) => (
+              <button
+                key={amt}
+                type="button"
+                className="btn btn-primary"
+                style={{ fontSize: 13, padding: "8px 18px", opacity: depositBusy ? 0.6 : 1 }}
+                disabled={depositBusy || amt < depositInfo.min_deposit_lock}
+                onClick={() => void handleDeposit(amt)}
+              >
+                Deposit {amt} $LOCK
+              </button>
+            ))}
+          </div>
+          {depositMsg && (
+            <div style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 10 }}>{depositMsg}</div>
+          )}
+        </div>
+      )}
+
       {DEV_TOPUP_ENABLED && (
         <div className="card">
           <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 10 }}>
@@ -210,7 +298,8 @@ export function BillingPanel() {
               <button
                 key={amt}
                 type="button"
-                className="btn-ghost"
+                className="btn btn-ghost"
+                style={{ fontSize: 13, padding: "8px 18px", opacity: topupBusy ? 0.6 : 1 }}
                 disabled={topupBusy}
                 onClick={() => void handleTopup(amt)}
               >

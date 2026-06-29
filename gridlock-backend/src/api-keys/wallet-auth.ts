@@ -49,7 +49,7 @@ export function parseWalletAuthHeaders(headers: Headers): {
 }
 
 export function verifyWalletAuthRequest(
-  action: string,
+  action: string | readonly string[],
   headers: Headers,
 ): { wallet: string } | { error: string } {
   const parsed = parseWalletAuthHeaders(headers);
@@ -64,9 +64,12 @@ export function verifyWalletAuthRequest(
   } catch {
     return { error: "Invalid wallet address" };
   }
-  const message = buildWalletAuthMessage(action, parsed.wallet, parsed.timestampMs);
-  if (!verifyWalletSignature({ ...parsed, message })) {
-    return { error: "Invalid wallet signature" };
+  const actions = typeof action === "string" ? [action] : action;
+  for (const a of actions) {
+    const message = buildWalletAuthMessage(a, parsed.wallet, parsed.timestampMs);
+    if (verifyWalletSignature({ ...parsed, message })) {
+      return { wallet: parsed.wallet };
+    }
   }
-  return { wallet: parsed.wallet };
+  return { error: "Invalid wallet signature" };
 }

@@ -58,12 +58,18 @@ function billingFields(
   apiKey: ApiKeyContext | undefined,
   promptTokens: number,
   completionTokens: number,
-): Pick<JobRecord, "owner_wallet" | "api_key_id" | "prompt_tokens" | "completion_tokens"> {
+): Pick<
+  JobRecord,
+  "owner_wallet" | "api_key_id" | "prompt_tokens" | "completion_tokens" | "escrow_customer_wallet"
+> {
+  const ownerWallet = apiKey?.owner_wallet ?? null;
   return {
-    owner_wallet: apiKey?.owner_wallet ?? null,
+    owner_wallet: ownerWallet,
     api_key_id: apiKey?.source === "database" ? apiKey.id : null,
     prompt_tokens: promptTokens,
     completion_tokens: completionTokens,
+    escrow_customer_wallet:
+      config.perCustomerEscrowTracking && ownerWallet ? ownerWallet : null,
   };
 }
 

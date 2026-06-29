@@ -48,6 +48,9 @@ function rowToJob(row: Record<string, unknown>): JobRecord {
     prompt_tokens: Number(row.prompt_tokens ?? 0),
     completion_tokens: Number(row.completion_tokens ?? 0),
     settlement_tx: row.settlement_tx ? String(row.settlement_tx) : null,
+    escrow_customer_wallet: row.escrow_customer_wallet
+      ? String(row.escrow_customer_wallet)
+      : null,
   };
 }
 
@@ -74,6 +77,7 @@ function jobToRow(job: JobRecord): Record<string, unknown> {
     prompt_tokens: job.prompt_tokens ?? 0,
     completion_tokens: job.completion_tokens ?? 0,
     settlement_tx: job.settlement_tx ?? null,
+    escrow_customer_wallet: job.escrow_customer_wallet ?? null,
   };
 }
 
@@ -609,5 +613,77 @@ export async function dbUpsertInvoice(invoice: BillingInvoiceRecord): Promise<vo
     if (error) throw error;
   } catch (error) {
     console.log(`[supabase] upsert_invoice failed: ${formatSupabaseError(error)}`);
+  }
+}
+
+export async function dbGetDepositByTx(txSignature: string): Promise<boolean> {
+  const sb = getClient();
+  if (!sb) return false;
+  try {
+    const { data, error } = await sb
+      .from("billing_deposits")
+      .select("tx_signature")
+      .eq("tx_signature", txSignature)
+      .maybeSingle();
+    if (error) throw error;
+    return Boolean(data);
+  } catch (error) {
+    console.log(`[supabase] get_deposit failed: ${formatSupabaseError(error)}`);
+    return false;
+  }
+}
+
+export async function dbInsertDeposit(row: {
+  tx_signature: string;
+  owner_wallet: string;
+  amount_lock: number;
+  deposit_vault: string;
+}): Promise<boolean> {
+  const sb = getClient();
+  if (!sb) return true;
+  try {
+    const { error } = await sb.from("billing_deposits").insert(row);
+    if (error) {
+      if (String(error.code) === "23505") return false;
+      throw error;
+    }
+    return true;
+  } catch (error) {
+    console.log(`[supabase] insert_deposit failed: ${formatSupabaseError(error)}`);
+    return false;
+  }
+}
+
+export async function dbListBillingWallets(): Promise<string[]> {
+  const sb = getClient();
+  if (!sb) return [];
+  try {
+    const wallets = new Set<string>();
+    const { data: keys, error: keysError } = await sb
+      .from("api_keys")
+      .select("owner_wallet")
+      .eq("is_active", true);
+    if (keysError) throw keysError;
+    for (const row of keys ?? []) {
+      if (row.owner_wallet) wallets.add(String(row.owner_wallet));
+    }
+
+    const { data: jobs, error: jobsError } = await sb
+      .from("jobs")
+      .select("owner_wallet, customer")
+      .not("owner_wallet", "is", null)
+      .limit(5000);
+    if (jobsError) throw jobsError;
+    for (const row of jobs ?? []) {
+      if (row.owner_wallet) wallets.add(String(row.owner_wallet));
+      else if (row.customer && String(row.customer).length >= 32) {
+        wallets.add(String(row.customer));
+      }
+    }
+
+    return [...wallets];
+  } catch (error) {
+    console.log(`[supabase] list_billing_wallets failed: ${formatSupabaseError(error)}`);
+    return [];
   }
 }
