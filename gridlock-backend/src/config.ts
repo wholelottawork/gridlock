@@ -12,6 +12,8 @@ export const config = {
   vllmApiKey: process.env.VLLM_API_KEY ?? "",
   redisUrl: process.env.REDIS_URL ?? "redis://localhost:6379",
   solanaRpcUrl: process.env.SOLANA_RPC_URL ?? "https://api.devnet.solana.com",
+  /** Solana cluster for explorer links (devnet | mainnet-beta). */
+  solanaCluster: process.env.SOLANA_CLUSTER ?? "devnet",
   routerKeypairPath: expandHome(process.env.ROUTER_KEYPAIR_PATH ?? "~/.config/solana/id.json"),
   /** Off by default — requires LOCK mint, token vaults, and matching Anchor ix encoding. */
   solanaSettlementEnabled: process.env.SOLANA_SETTLEMENT_ENABLED === "true",

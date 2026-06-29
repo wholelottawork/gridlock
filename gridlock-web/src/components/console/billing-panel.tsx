@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import {
+  fetchBillingInvoices,
   fetchBillingSummary,
   fetchBillingTopup,
   fetchModelPricing,
   type ApiModelPricing,
+  type BillingInvoice,
   type BillingSummary,
 } from "@/lib/api-client";
 import { INSECURE_KEY_MANAGEMENT, signGridlockKeysAction } from "@/lib/wallet-auth";
@@ -15,6 +17,22 @@ const TIER_ORDER = ["batch", "standard", "realtime", "confidential"] as const;
 const DEV_TOPUP_ENABLED =
   process.env.NEXT_PUBLIC_GRIDLOCK_BILLING_DEV_TOPUP === "true" || INSECURE_KEY_MANAGEMENT;
 const LOW_BALANCE_THRESHOLD = 0.5;
+
+function invoiceStatusLabel(status: BillingInvoice["status"]): string {
+  if (status === "open") return "OPEN";
+  if (status === "paid") return "PAID";
+  return "OFF-CHAIN";
+}
+
+function invoiceStatusColor(status: BillingInvoice["status"]): string {
+  if (status === "open") return "var(--orange)";
+  if (status === "paid") return "var(--green)";
+  return "var(--text-muted)";
+}
+
+function shortTx(sig: string): string {
+  return `${sig.slice(0, 4)}…${sig.slice(-4)}`;
+}
 
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -32,6 +50,7 @@ export function BillingPanel() {
   const wallet = publicKey?.toBase58() ?? null;
 
   const [summary, setSummary] = useState<BillingSummary | null>(null);
+  const [invoices, setInvoices] = useState<BillingInvoice[]>([]);
   const [models, setModels] = useState<ApiModelPricing[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,11 +76,14 @@ export function BillingPanel() {
     setError(null);
     try {
       const auth = await signAuth("summary");
-      const [billing, pricing] = await Promise.all([
+      const invoiceAuth = await signAuth("invoices");
+      const [billing, invoiceRes, pricing] = await Promise.all([
         fetchBillingSummary(auth),
+        fetchBillingInvoices(invoiceAuth),
         fetchModelPricing(),
       ]);
       setSummary(billing);
+      setInvoices(invoiceRes.invoices);
       setModels(pricing.models);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load billing");
@@ -331,8 +353,57 @@ export function BillingPanel() {
         <div style={{ fontSize: 10, color: "var(--text-muted)", fontWeight: 700, letterSpacing: "1px", marginBottom: 14 }}>
           INVOICE HISTORY
         </div>
-        <div style={{ fontSize: 12, color: "var(--text-muted)", padding: "8px 0" }}>
-          Monthly on-chain invoices are not enabled yet (Phase C). Current-month usage above is live from job records.
+        {invoices.length === 0 ? (
+          <div style={{ fontSize: 12, color: "var(--text-muted)", padding: "8px 0" }}>
+            No invoices yet — usage this month will appear as an open invoice.
+          </div>
+        ) : (
+          <table className="data-table">
+            <thead>
+              <tr>
+                {["Period", "Amount", "Requests", "Status", "On-Chain Tx"].map((h) => (
+                  <th key={h}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {invoices.map((inv) => (
+                <tr key={`${inv.period_year}-${inv.period_month}`}>
+                  <td style={{ fontWeight: 600 }}>{inv.period_label}</td>
+                  <td style={{ color: "var(--orange)", fontWeight: 700 }}>{inv.amount_lock.toFixed(2)} $LOCK</td>
+                  <td>{inv.request_count.toLocaleString()}</td>
+                  <td>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        fontWeight: 700,
+                        color: invoiceStatusColor(inv.status),
+                      }}
+                    >
+                      {invoiceStatusLabel(inv.status)}
+                    </span>
+                  </td>
+                  <td style={{ fontFamily: "monospace", fontSize: 11 }}>
+                    {inv.explorer_url && inv.settlement_tx ? (
+                      <a
+                        href={inv.explorer_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: "var(--orange)", textDecoration: "none" }}
+                      >
+                        {shortTx(inv.settlement_tx)}
+                      </a>
+                    ) : (
+                      <span style={{ color: "var(--text-muted)" }}>—</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <div style={{ marginTop: 14, fontSize: 12, color: "var(--text-muted)" }}>
+          Closed months are settled from job records. On-chain tx links appear when Solana settlement succeeds per job.
         </div>
       </div>
     </div>

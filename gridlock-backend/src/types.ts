@@ -44,6 +44,23 @@ export interface JobRecord {
   api_key_id?: string | null;
   prompt_tokens?: number;
   completion_tokens?: number;
+  settlement_tx?: string | null;
+}
+
+export interface BillingInvoiceRecord {
+  id: string;
+  owner_wallet: string;
+  period_year: number;
+  period_month: number;
+  period_label: string;
+  amount_lock: number;
+  penalties_credited_lock: number;
+  request_count: number;
+  token_count: number;
+  status: "open" | "paid" | "paid_offchain";
+  settlement_tx: string | null;
+  settled_at: string | null;
+  created_at: string;
 }
 
 export interface GridlockOptions {

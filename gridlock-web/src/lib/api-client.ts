@@ -257,6 +257,31 @@ export async function fetchBillingTopup(
   return post("/v1/billing/topup", { amount }, keysHeaders(auth));
 }
 
+export interface BillingInvoice {
+  id: string;
+  owner_wallet: string;
+  period_year: number;
+  period_month: number;
+  period_label: string;
+  amount_lock: number;
+  penalties_credited_lock: number;
+  request_count: number;
+  token_count: number;
+  status: "open" | "paid" | "paid_offchain";
+  settlement_tx: string | null;
+  settled_at: string | null;
+  created_at: string;
+  explorer_url: string | null;
+}
+
+export async function fetchBillingInvoices(auth: WalletAuthHeaders): Promise<{
+  invoices: BillingInvoice[];
+  total: number;
+  solana_cluster: string;
+}> {
+  return get("/v1/billing/invoices", keysHeaders(auth));
+}
+
 export async function fetchModelPricing(): Promise<{ models: ApiModelPricing[]; total: number }> {
   return get("/v1/models");
 }

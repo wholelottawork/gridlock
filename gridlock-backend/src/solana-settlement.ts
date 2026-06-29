@@ -141,10 +141,10 @@ async function sendAndConfirm(
   programId: string,
   data: Buffer,
   accounts: AccountMeta[],
-): Promise<boolean> {
+): Promise<string | null> {
   const sig = await sendIx(programId, data, accounts);
-  if (!sig) return false;
-  return confirmTx(sig);
+  if (!sig) return null;
+  return (await confirmTx(sig)) ? sig : null;
 }
 
 /** Router opens job escrow (devnet: router acts as customer). */
@@ -178,7 +178,7 @@ export async function anchorOpenJob(
     borshBool(confidential),
   ]);
 
-  return sendAndConfirm(PROGRAM_IDS.jobScheduler, data, [
+  return (await sendAndConfirm(PROGRAM_IDS.jobScheduler, data, [
     { pubkey: kp.publicKey, isSigner: true, isWritable: true },
     { pubkey: jobPda, isSigner: false, isWritable: true },
     { pubkey: escrowPda, isSigner: false, isWritable: true },
@@ -187,7 +187,7 @@ export async function anchorOpenJob(
     { pubkey: new PublicKey(config.lockMint), isSigner: false, isWritable: false },
     { pubkey: TOKEN_2022, isSigner: false, isWritable: false },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-  ]);
+  ])) !== null;
 }
 
 export async function anchorAssignWorker(jobId: string, workerPubkey: string): Promise<boolean> {
@@ -204,10 +204,10 @@ export async function anchorAssignWorker(jobId: string, workerPubkey: string): P
   const jobPda = derivePda(PROGRAM_IDS.jobScheduler, [Buffer.from("job"), id]);
 
   const data = Buffer.concat([anchorDiscriminator("assign_worker"), id, worker.toBuffer()]);
-  return sendAndConfirm(PROGRAM_IDS.jobScheduler, data, [
+  return (await sendAndConfirm(PROGRAM_IDS.jobScheduler, data, [
     { pubkey: kp.publicKey, isSigner: true, isWritable: false },
     { pubkey: jobPda, isSigner: false, isWritable: true },
-  ]);
+  ])) !== null;
 }
 
 export async function anchorCommitReceipt(
@@ -237,11 +237,11 @@ export async function anchorCommitReceipt(
     borshBool(confidential),
     borshOptionBytes32(attestationBytes),
   ]);
-  return sendAndConfirm(PROGRAM_IDS.slaRegistry, data, [
+  return (await sendAndConfirm(PROGRAM_IDS.slaRegistry, data, [
     { pubkey: kp.publicKey, isSigner: true, isWritable: true },
     { pubkey: receipt, isSigner: false, isWritable: true },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-  ]);
+  ])) !== null;
 }
 
 export async function anchorFinalizeReceipt(jobId: string): Promise<boolean> {
@@ -252,10 +252,10 @@ export async function anchorFinalizeReceipt(jobId: string): Promise<boolean> {
   const id = jobIdBytes(jobId);
   const receipt = derivePda(PROGRAM_IDS.slaRegistry, [Buffer.from("receipt"), id]);
   const data = anchorDiscriminator("finalize_unchallenged");
-  return sendAndConfirm(PROGRAM_IDS.slaRegistry, data, [
+  return (await sendAndConfirm(PROGRAM_IDS.slaRegistry, data, [
     { pubkey: kp.publicKey, isSigner: true, isWritable: false },
     { pubkey: receipt, isSigner: false, isWritable: true },
-  ]);
+  ])) !== null;
 }
 
 function workerStakeAccount(worker: WorkerRecord): PublicKey | null {
@@ -268,12 +268,19 @@ export async function anchorSettleOrPenalize(
   jobId: string,
   worker: WorkerRecord,
 ): Promise<boolean> {
-  if (!config.solanaSettlementEnabled || !lockAccountsReady()) return false;
+  return (await anchorSettleOrPenalizeWithSig(jobId, worker)) !== null;
+}
+
+export async function anchorSettleOrPenalizeWithSig(
+  jobId: string,
+  worker: WorkerRecord,
+): Promise<string | null> {
+  if (!config.solanaSettlementEnabled || !lockAccountsReady()) return null;
 
   const stake = workerStakeAccount(worker);
   if (!stake) {
     console.log("[solana] settle_or_penalize: worker stake token account not configured");
-    return false;
+    return null;
   }
 
   const id = jobIdBytes(jobId);
@@ -299,10 +306,10 @@ export async function anchorSettleOrPenalize(
   ]);
 }
 
-export async function anchorDistributeFees(amountLock: number): Promise<boolean> {
-  if (!config.solanaSettlementEnabled || !lockAccountsReady()) return false;
+export async function anchorDistributeFees(amountLock: number): Promise<string | null> {
+  if (!config.solanaSettlementEnabled || !lockAccountsReady()) return null;
   const { lockMint, feeVault, stakerPool, workerPayout, treasury, burnVault } = config;
-  if (!stakerPool || !workerPayout || !treasury || !burnVault) return false;
+  if (!stakerPool || !workerPayout || !treasury || !burnVault) return null;
 
   const collector = derivePda(PROGRAM_IDS.feeCollector, [Buffer.from("fee_collector")]);
   const data = Buffer.concat([anchorDiscriminator("distribute_fees"), borshU64(amountLock)]);
@@ -318,7 +325,7 @@ export async function anchorDistributeFees(amountLock: number): Promise<boolean>
   ]);
 }
 
-/** Full settlement pipeline after job completes. */
+/** Full settlement pipeline after job completes. Returns primary on-chain tx sig if any step succeeded. */
 export async function runOnChainSettlement(
   jobId: string,
   slaTier: string,
@@ -329,31 +336,33 @@ export async function runOnChainSettlement(
   worker: WorkerRecord,
   fee: number,
   attestationHash: string | null = null,
-): Promise<void> {
-  if (!config.solanaSettlementEnabled) return;
+): Promise<string | null> {
+  if (!config.solanaSettlementEnabled) return null;
 
   const amountBase = Math.floor(fee * 1_000_000_000);
 
   if (!(await anchorCommitReceipt(jobId, slaTier, ttftMs, tpotMs, slaMet, confidential, attestationHash))) {
     console.log("[solana] settlement aborted: commit_receipt failed");
-    return;
+    return null;
   }
 
-  // Wait for 2s challenge window (sla-registry CHALLENGE_WINDOW_SECS on devnet)
   await new Promise((r) => setTimeout(r, 2500));
 
   if (!(await anchorFinalizeReceipt(jobId))) {
     console.log("[solana] settlement aborted: finalize_unchallenged failed");
-    return;
+    return null;
   }
 
-  if (!(await anchorSettleOrPenalize(jobId, worker))) {
+  const settleSig = await anchorSettleOrPenalizeWithSig(jobId, worker);
+  if (!settleSig) {
     console.log("[solana] settle_or_penalize failed (penalty/escrow release)");
-    return;
+    return null;
   }
 
-  // Split fees already in fee_vault from settle_job CPI; distribute if amount > 0
   if (amountBase > 0) {
-    await anchorDistributeFees(amountBase);
+    const distributeSig = await anchorDistributeFees(amountBase);
+    return distributeSig ?? settleSig;
   }
+
+  return settleSig;
 }

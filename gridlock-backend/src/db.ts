@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { config } from "./config.js";
-import type { ApiKeyRecord, JobRecord, WorkerRecord } from "./types.js";
+import type { ApiKeyRecord, BillingInvoiceRecord, JobRecord, WorkerRecord } from "./types.js";
 
 let sbClient: SupabaseClient | null = null;
 
@@ -47,6 +47,7 @@ function rowToJob(row: Record<string, unknown>): JobRecord {
     api_key_id: row.api_key_id ? String(row.api_key_id) : null,
     prompt_tokens: Number(row.prompt_tokens ?? 0),
     completion_tokens: Number(row.completion_tokens ?? 0),
+    settlement_tx: row.settlement_tx ? String(row.settlement_tx) : null,
   };
 }
 
@@ -72,6 +73,7 @@ function jobToRow(job: JobRecord): Record<string, unknown> {
     api_key_id: job.api_key_id ?? null,
     prompt_tokens: job.prompt_tokens ?? 0,
     completion_tokens: job.completion_tokens ?? 0,
+    settlement_tx: job.settlement_tx ?? null,
   };
 }
 
@@ -526,5 +528,86 @@ export async function dbApplyCredit(
   } catch (error) {
     console.log(`[supabase] apply_credit failed: ${formatSupabaseError(error)}`);
     return dbGetCustomerBalance(wallet);
+  }
+}
+
+function rowToInvoice(row: Record<string, unknown>): BillingInvoiceRecord {
+  return {
+    id: String(row.id),
+    owner_wallet: String(row.owner_wallet),
+    period_year: Number(row.period_year),
+    period_month: Number(row.period_month),
+    period_label: String(row.period_label),
+    amount_lock: Number(row.amount_lock ?? 0),
+    penalties_credited_lock: Number(row.penalties_credited_lock ?? 0),
+    request_count: Number(row.request_count ?? 0),
+    token_count: Number(row.token_count ?? 0),
+    status: String(row.status) as BillingInvoiceRecord["status"],
+    settlement_tx: row.settlement_tx ? String(row.settlement_tx) : null,
+    settled_at: row.settled_at ? String(row.settled_at) : null,
+    created_at: String(row.created_at),
+  };
+}
+
+export async function dbLoadAllJobsForWallet(wallet: string): Promise<JobRecord[]> {
+  const sb = getClient();
+  if (!sb) return [];
+  try {
+    const { data, error } = await sb
+      .from("jobs")
+      .select("*")
+      .or(`owner_wallet.eq.${wallet},customer.eq.${wallet}`)
+      .order("ts", { ascending: false })
+      .limit(10000);
+    if (error) throw error;
+    return (data ?? []).map((row) => rowToJob(row as Record<string, unknown>));
+  } catch (error) {
+    console.log(`[supabase] load_all_jobs_for_wallet failed: ${formatSupabaseError(error)}`);
+    return [];
+  }
+}
+
+export async function dbListInvoicesByWallet(wallet: string): Promise<BillingInvoiceRecord[]> {
+  const sb = getClient();
+  if (!sb) return [];
+  try {
+    const { data, error } = await sb
+      .from("billing_invoices")
+      .select("*")
+      .eq("owner_wallet", wallet)
+      .order("period_year", { ascending: false })
+      .order("period_month", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map((row) => rowToInvoice(row as Record<string, unknown>));
+  } catch (error) {
+    console.log(`[supabase] list_invoices failed: ${formatSupabaseError(error)}`);
+    return [];
+  }
+}
+
+export async function dbUpsertInvoice(invoice: BillingInvoiceRecord): Promise<void> {
+  const sb = getClient();
+  if (!sb) return;
+  try {
+    const row = {
+      id: invoice.id,
+      owner_wallet: invoice.owner_wallet,
+      period_year: invoice.period_year,
+      period_month: invoice.period_month,
+      period_label: invoice.period_label,
+      amount_lock: invoice.amount_lock,
+      penalties_credited_lock: invoice.penalties_credited_lock,
+      request_count: invoice.request_count,
+      token_count: invoice.token_count,
+      status: invoice.status,
+      settlement_tx: invoice.settlement_tx,
+      settled_at: invoice.settled_at,
+    };
+    const { error } = await sb
+      .from("billing_invoices")
+      .upsert(row, { onConflict: "owner_wallet,period_year,period_month" });
+    if (error) throw error;
+  } catch (error) {
+    console.log(`[supabase] upsert_invoice failed: ${formatSupabaseError(error)}`);
   }
 }

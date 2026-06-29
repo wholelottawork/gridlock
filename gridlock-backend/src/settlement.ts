@@ -25,20 +25,32 @@ export async function settleJob(
 
   addLockBurned(fee * 0.1);
 
-  if (config.solanaSettlementEnabled) {
-    await runOnChainSettlement(jobId, slaTier, ttftMs, tpotMs, slaMet, confidential, worker, fee, attestationHash);
-  } else if (!settlementSkipLogged) {
-    settlementSkipLogged = true;
-    console.log(
-      "[solana] on-chain settlement skipped (SOLANA_SETTLEMENT_ENABLED=false). " +
-        "Jobs still settle locally; enable after LOCK mint + vaults are initialized.",
-    );
-  }
-
   const job = jobsStore.find((j) => j.id === jobId);
   if (job) {
     job.status = "settled";
     if (!slaMet && penalty != null) job.penalty_paid = Math.round(penalty * 10000) / 10000;
+
+    if (config.solanaSettlementEnabled) {
+      const tx = await runOnChainSettlement(
+        jobId,
+        slaTier,
+        ttftMs,
+        tpotMs,
+        slaMet,
+        confidential,
+        worker,
+        fee,
+        attestationHash,
+      );
+      if (tx) job.settlement_tx = tx;
+    } else if (!settlementSkipLogged) {
+      settlementSkipLogged = true;
+      console.log(
+        "[solana] on-chain settlement skipped (SOLANA_SETTLEMENT_ENABLED=false). " +
+          "Jobs still settle locally; enable after LOCK mint + vaults are initialized.",
+      );
+    }
+
     await dbInsertJob(job);
 
     if (!slaMet && penalty != null && job.owner_wallet) {

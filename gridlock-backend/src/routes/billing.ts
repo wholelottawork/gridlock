@@ -7,6 +7,7 @@ import {
   monthStartTs,
 } from "../billing/aggregate.js";
 import { getCreditBalance, topupCredits } from "../billing/credits.js";
+import { solscanTxUrl, syncInvoicesForWallet } from "../billing/invoices.js";
 import { config } from "../config.js";
 import { dbListApiKeysByWallet, dbLoadJobsForWallet, supabaseConfigured } from "../db.js";
 import { jobsStore } from "../state.js";
@@ -38,6 +39,21 @@ billingRoutes.get("/v1/billing/summary", async (c) => {
   summary.credit_balance_lock = creditBalance;
 
   return c.json(summary);
+});
+
+billingRoutes.get("/v1/billing/invoices", async (c) => {
+  const auth = resolveWallet(c, "invoices");
+  if ("error" in auth) return c.json({ error: auth.error }, 401);
+
+  const invoices = await syncInvoicesForWallet(auth.wallet);
+  return c.json({
+    invoices: invoices.map((inv) => ({
+      ...inv,
+      explorer_url: inv.settlement_tx ? solscanTxUrl(inv.settlement_tx) : null,
+    })),
+    total: invoices.length,
+    solana_cluster: config.solanaCluster,
+  });
 });
 
 billingRoutes.post("/v1/billing/topup", async (c) => {
