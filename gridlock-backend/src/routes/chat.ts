@@ -12,7 +12,7 @@ import { appendJob } from "../state.js";
 import { createDispatchPayload, workerHub } from "../ws/hub.js";
 import { noWorkerResponse } from "../tee-capacity.js";
 import { hashPrefix, pickDecodeWorker, pickPrefillWorker } from "../workers.js";
-import type { ChatCompletionRequest, JobRecord, WorkerRecord } from "../types.js";
+import type { ApiKeyContext, ChatCompletionRequest, JobRecord, WorkerRecord } from "../types.js";
 
 export const chatRoutes = new Hono();
 
@@ -51,6 +51,19 @@ function createJobRecord(
   partial: Omit<JobRecord, "status"> & { status?: string },
 ): JobRecord {
   return { status: "settling", ...partial };
+}
+
+function billingFields(
+  apiKey: ApiKeyContext | undefined,
+  promptTokens: number,
+  completionTokens: number,
+): Pick<JobRecord, "owner_wallet" | "api_key_id" | "prompt_tokens" | "completion_tokens"> {
+  return {
+    owner_wallet: apiKey?.owner_wallet ?? null,
+    api_key_id: apiKey?.source === "database" ? apiKey.id : null,
+    prompt_tokens: promptTokens,
+    completion_tokens: completionTokens,
+  };
 }
 
 function finalizeAttestation(params: {
@@ -181,6 +194,7 @@ chatRoutes.post("/v1/chat/completions", async (c) => {
         fee,
         cache_warm: warm !== null,
         attestation_hash: attestation.hash,
+        ...billingFields(apiKey, promptTokens, result.tokensGenerated),
       });
       appendJob(jobRecord);
       void settleJob(jobId, slaTier, ttftMs, tpotMs, slaMet, confidential, worker, fee, attestation.hash);
@@ -296,6 +310,7 @@ chatRoutes.post("/v1/chat/completions", async (c) => {
         fee,
         cache_warm: warm !== null,
         attestation_hash: attestation.hash,
+        ...billingFields(apiKey, promptTokens, tokenCount),
       });
       appendJob(rec);
       await cacheSetTtl(prefixKey, worker.address);
@@ -390,6 +405,7 @@ chatRoutes.post("/v1/chat/completions", async (c) => {
     fee,
     cache_warm: warm !== null,
     attestation_hash: attestation.hash,
+    ...billingFields(apiKey, promptTokens, tokens.length),
   });
   appendJob(jobRecord);
 

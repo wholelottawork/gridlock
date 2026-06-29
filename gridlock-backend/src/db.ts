@@ -25,7 +25,32 @@ function formatSupabaseError(error: unknown): string {
   return String(error);
 }
 
-/** Map in-memory job to Supabase `jobs` row (columns from 001_initial.sql). */
+/** Map Supabase `jobs` row to in-memory JobRecord. */
+function rowToJob(row: Record<string, unknown>): JobRecord {
+  return {
+    id: String(row.id),
+    customer: String(row.customer ?? ""),
+    model: String(row.model ?? ""),
+    sla_tier: String(row.sla_tier ?? "standard"),
+    ttft_ms: Number(row.ttft_ms ?? 0),
+    tpot_ms: Number(row.tpot_ms ?? 0),
+    sla_met: Boolean(row.sla_met),
+    confidential: Boolean(row.confidential),
+    worker: String(row.worker ?? ""),
+    worker_address: String(row.worker_address ?? ""),
+    ts: Number(row.ts ?? 0),
+    penalty_paid: row.penalty_paid != null ? Number(row.penalty_paid) : null,
+    fee: Number(row.fee ?? 0),
+    status: String(row.status ?? "settled"),
+    attestation_hash: row.attestation_hash ? String(row.attestation_hash) : null,
+    owner_wallet: row.owner_wallet ? String(row.owner_wallet) : null,
+    api_key_id: row.api_key_id ? String(row.api_key_id) : null,
+    prompt_tokens: Number(row.prompt_tokens ?? 0),
+    completion_tokens: Number(row.completion_tokens ?? 0),
+  };
+}
+
+/** Map in-memory job to Supabase `jobs` row. */
 function jobToRow(job: JobRecord): Record<string, unknown> {
   return {
     id: job.id,
@@ -43,6 +68,10 @@ function jobToRow(job: JobRecord): Record<string, unknown> {
     fee: job.fee,
     status: job.status,
     attestation_hash: job.attestation_hash ?? null,
+    owner_wallet: job.owner_wallet ?? null,
+    api_key_id: job.api_key_id ?? null,
+    prompt_tokens: job.prompt_tokens ?? 0,
+    completion_tokens: job.completion_tokens ?? 0,
   };
 }
 
@@ -100,7 +129,7 @@ export async function dbLoadJobs(): Promise<JobRecord[]> {
       .order("ts", { ascending: false })
       .limit(1000);
     if (error) throw error;
-    return (data ?? []) as JobRecord[];
+    return (data ?? []).map((row) => rowToJob(row as Record<string, unknown>));
   } catch (error) {
     console.log(`[supabase] load_jobs failed: ${error}`);
     return [];
@@ -311,5 +340,24 @@ export async function dbIncrementApiKeyUsage(id: string): Promise<void> {
     if (error) throw error;
   } catch (error) {
     console.log(`[supabase] increment_api_key_usage failed: ${formatSupabaseError(error)}`);
+  }
+}
+
+export async function dbLoadJobsForWallet(wallet: string, sinceTs: number): Promise<JobRecord[]> {
+  const sb = getClient();
+  if (!sb) return [];
+  try {
+    const { data, error } = await sb
+      .from("jobs")
+      .select("*")
+      .or(`owner_wallet.eq.${wallet},customer.eq.${wallet}`)
+      .gte("ts", sinceTs)
+      .order("ts", { ascending: false })
+      .limit(5000);
+    if (error) throw error;
+    return (data ?? []).map((row) => rowToJob(row as Record<string, unknown>));
+  } catch (error) {
+    console.log(`[supabase] load_jobs_for_wallet failed: ${formatSupabaseError(error)}`);
+    return [];
   }
 }

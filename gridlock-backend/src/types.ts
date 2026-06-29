@@ -40,6 +40,10 @@ export interface JobRecord {
   status: string;
   cache_warm?: boolean;
   attestation_hash?: string | null;
+  owner_wallet?: string | null;
+  api_key_id?: string | null;
+  prompt_tokens?: number;
+  completion_tokens?: number;
 }
 
 export interface GridlockOptions {

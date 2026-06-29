@@ -1,8 +1,6 @@
 import { Hono } from "hono";
-import type { Context } from "hono";
 import { generateApiKeySecret, isValidSlaTier } from "../api-keys/crypto.js";
-import { verifyWalletAuthRequest } from "../api-keys/wallet-auth.js";
-import { config } from "../config.js";
+import { resolveWallet } from "../api-keys/resolve-wallet.js";
 import {
   dbGetApiKeyById,
   dbInsertApiKey,
@@ -15,22 +13,6 @@ import {
 import type { CreateApiKeyRequest, UpdateApiKeyRequest } from "../types.js";
 
 export const keyRoutes = new Hono();
-
-function resolveWallet(
-  c: Context,
-  action: string,
-): { wallet: string } | { error: string } {
-  if (config.insecureKeyManagement) {
-    const wallet = c.req.header("x-gridlock-wallet")?.trim();
-    if (!wallet) {
-      return { error: "Missing X-Gridlock-Wallet (insecure dev mode)" };
-    }
-    return { wallet };
-  }
-  const verified = verifyWalletAuthRequest(action, c.req.raw.headers);
-  if ("error" in verified) return verified;
-  return verified;
-}
 
 keyRoutes.get("/v1/keys", async (c) => {
   if (!supabaseConfigured()) {

@@ -6,6 +6,7 @@ import "./hono-context.js";
 import { getRedis } from "./cache.js";
 import { dbLoadJobs, dbLoadWorkers } from "./db.js";
 import { apiKeyAuthMiddleware } from "./middleware/api-key-auth.js";
+import { billingRoutes } from "./routes/billing.js";
 import { chatRoutes } from "./routes/chat.js";
 import { jobRoutes } from "./routes/jobs.js";
 import { keyRoutes } from "./routes/keys.js";
@@ -32,6 +33,7 @@ app.route("/", chatRoutes);
 app.route("/", jobRoutes);
 app.route("/", workerRoutes);
 app.route("/", keyRoutes);
+app.route("/", billingRoutes);
 app.route("/", statsRoutes);
 app.route("/", liveRoutes);
 

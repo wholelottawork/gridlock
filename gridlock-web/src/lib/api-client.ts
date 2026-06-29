@@ -204,6 +204,56 @@ export async function revokeApiKey(
   return del(`/v1/keys/${keyId}`, keysHeaders(auth));
 }
 
+// ─── Billing ─────────────────────────────────────────────────────────────────
+
+export interface BillingSummary {
+  period: { start: string; end: string; label: string };
+  mtd_spend_lock: number;
+  mtd_requests: number;
+  mtd_tokens: number;
+  penalties_credited_lock: number;
+  credit_balance_lock: number | null;
+  by_tier: {
+    tier: string;
+    tier_id: string;
+    requests: number;
+    spend: number;
+    pct: number;
+    color: string;
+  }[];
+  by_model: {
+    model: string;
+    requests: number;
+    tokens: number;
+    spend: number;
+    pct: number;
+  }[];
+  by_api_key: {
+    id: string;
+    name: string;
+    key_prefix: string;
+    requests: number;
+    spend: number;
+  }[];
+}
+
+export interface ApiModelPricing {
+  id: string;
+  provider: string;
+  context_window: number;
+  parameters: string;
+  base_fee_lock_per_1m: number;
+  tier_multipliers: Record<string, number>;
+}
+
+export async function fetchBillingSummary(auth: WalletAuthHeaders): Promise<BillingSummary> {
+  return get("/v1/billing/summary", keysHeaders(auth));
+}
+
+export async function fetchModelPricing(): Promise<{ models: ApiModelPricing[]; total: number }> {
+  return get("/v1/models");
+}
+
 // ─── Chat ────────────────────────────────────────────────────────────────────
 
 /** Send a chat completion. Pass the full conversation in `messages` — workers are stateless. */
