@@ -60,6 +60,34 @@ export const WINDOWS_WORKER_DOWNLOAD = {
   note: "Windows 10 / 11",
 } as const;
 
+export const MAC_WORKER_DOWNLOAD = {
+  label: "macOS",
+  version: `v${WORKER_APP_VERSION}`,
+  filename: MAC_INSTALLER,
+  url: downloadUrl(MAC_INSTALLER),
+  size: process.env.NEXT_PUBLIC_WORKER_MAC_SIZE ?? "112 MB",
+  arch: "Apple Silicon / Intel",
+  note: "macOS 12+",
+} as const;
+
+export const LINUX_WORKER_DOWNLOAD = {
+  label: "Linux",
+  version: `v${WORKER_APP_VERSION}`,
+  filename: LINUX_INSTALLER,
+  url: downloadUrl(LINUX_INSTALLER),
+  size: process.env.NEXT_PUBLIC_WORKER_LINUX_SIZE ?? "108 MB",
+  arch: "x64",
+  note: "AppImage · Ubuntu 22.04+",
+} as const;
+
+export const DESKTOP_WORKER_DOWNLOADS_LIST = [
+  WINDOWS_WORKER_DOWNLOAD,
+  MAC_WORKER_DOWNLOAD,
+  LINUX_WORKER_DOWNLOAD,
+] as const;
+
+export type WorkerDownloadMeta = (typeof DESKTOP_WORKER_DOWNLOADS_LIST)[number];
+
 export const DESKTOP_WORKER_DOWNLOADS = {
   windows: {
     label: WINDOWS_WORKER_DOWNLOAD.label,
@@ -67,14 +95,14 @@ export const DESKTOP_WORKER_DOWNLOADS = {
     url: WINDOWS_WORKER_DOWNLOAD.url,
   },
   mac: {
-    label: "macOS",
-    filename: MAC_INSTALLER,
-    url: downloadUrl(MAC_INSTALLER),
+    label: MAC_WORKER_DOWNLOAD.label,
+    filename: MAC_WORKER_DOWNLOAD.filename,
+    url: MAC_WORKER_DOWNLOAD.url,
   },
   linux: {
-    label: "Linux",
-    filename: LINUX_INSTALLER,
-    url: downloadUrl(LINUX_INSTALLER),
+    label: LINUX_WORKER_DOWNLOAD.label,
+    filename: LINUX_WORKER_DOWNLOAD.filename,
+    url: LINUX_WORKER_DOWNLOAD.url,
   },
 } as const;
 

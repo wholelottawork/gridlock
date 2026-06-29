@@ -3,15 +3,87 @@ import { useState } from "react";
 import { motion } from "framer-motion";
 import Link from "next/link";
 import { GridlockLogo } from "@/components/gridlock-logo";
-import { WINDOWS_WORKER_DOWNLOAD, WORKER_RELEASES_URL } from "@/lib/worker-downloads";
+import { LinuxIcon, MacIcon, WindowsIcon } from "@/components/platform-icons";
+import { DESKTOP_WORKER_DOWNLOADS_LIST, WORKER_RELEASES_URL, type WorkerDownloadMeta } from "@/lib/worker-downloads";
 
 const fadeUp = { hidden: { opacity: 0, y: 18 }, show: { opacity: 1, y: 0 } };
 
-function WindowsIcon() {
+function PlatformIcon({ label }: { label: WorkerDownloadMeta["label"] }) {
+  if (label === "Windows") return <WindowsIcon />;
+  if (label === "macOS") return <MacIcon />;
+  return <LinuxIcon />;
+}
+
+function DownloadCard({ dl, delay }: { dl: WorkerDownloadMeta; delay: number }) {
+  const [hovered, setHovered] = useState(false);
+
   return (
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor">
-      <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801" />
-    </svg>
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay, duration: 0.5 }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        background: hovered ? "var(--bg-3)" : "var(--bg-2)",
+        border: `1px solid ${hovered ? "rgba(255,255,255,0.18)" : "var(--border)"}`,
+        borderRadius: 12,
+        padding: "28px 32px",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        gap: 0,
+        transition: "all 0.2s",
+        cursor: "default",
+        width: 280,
+        flex: "1 1 280px",
+        maxWidth: 320,
+      }}
+    >
+      <div style={{ color: "var(--text-primary)", marginBottom: 16 }}>
+        <PlatformIcon label={dl.label} />
+      </div>
+      <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 4 }}>{dl.label}</div>
+      <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700, marginBottom: 2 }}>{dl.note}</div>
+      <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 20, textAlign: "center" }}>
+        {dl.arch} · {dl.size}
+      </div>
+      <a
+        href={dl.url}
+        download={dl.filename}
+        style={{
+          display: "block",
+          width: "100%",
+          background: "#FFFFFF",
+          color: "#000000",
+          border: "none",
+          borderRadius: 8,
+          padding: "11px 0",
+          fontSize: 13,
+          fontWeight: 800,
+          textDecoration: "none",
+          textAlign: "center",
+          letterSpacing: "0.3px",
+          transition: "opacity 0.15s",
+        }}
+        onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.88")}
+        onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+      >
+        Download {dl.version}
+      </a>
+      <div
+        style={{
+          marginTop: 12,
+          fontSize: 11,
+          color: "var(--text-muted)",
+          fontFamily: "monospace",
+          wordBreak: "break-all",
+          textAlign: "center",
+        }}
+      >
+        {dl.filename}
+      </div>
+    </motion.div>
   );
 }
 
@@ -84,8 +156,6 @@ const REQUIREMENTS = [
 ];
 
 export default function DownloadPage() {
-  const [hovered, setHovered] = useState(false);
-
   return (
     <div>
       {/* ── Hero ──────────────────────────────────────────────────────────────── */}
@@ -114,52 +184,20 @@ export default function DownloadPage() {
           </p>
         </motion.div>
 
-        {/* ── Download card ──────────────────────────────────────────────────── */}
-        <div style={{ display: "flex", justifyContent: "center" }}>
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.07, duration: 0.5 }}
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
-            style={{
-              background: hovered ? "var(--bg-3)" : "var(--bg-2)",
-              border: `1px solid ${hovered ? "rgba(255,255,255,0.18)" : "var(--border)"}`,
-              borderRadius: 12,
-              padding: "28px 32px",
-              display: "flex", flexDirection: "column", alignItems: "center", gap: 0,
-              transition: "all 0.2s",
-              cursor: "default",
-              minWidth: 280,
-            }}
-          >
-            <div style={{ color: "var(--text-primary)", marginBottom: 16 }}>
-              <WindowsIcon />
-            </div>
-            <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 4 }}>{WINDOWS_WORKER_DOWNLOAD.label}</div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", fontWeight: 700, marginBottom: 2 }}>{WINDOWS_WORKER_DOWNLOAD.note}</div>
-            <div style={{ fontSize: 11, color: "var(--text-muted)", marginBottom: 20 }}>{WINDOWS_WORKER_DOWNLOAD.arch} · {WINDOWS_WORKER_DOWNLOAD.size}</div>
-            <a
-              href={WINDOWS_WORKER_DOWNLOAD.url}
-              download={WINDOWS_WORKER_DOWNLOAD.filename}
-              style={{
-                display: "block", width: "100%",
-                background: "#FFFFFF", color: "#000000",
-                border: "none", borderRadius: 8,
-                padding: "11px 0",
-                fontSize: 13, fontWeight: 800,
-                textDecoration: "none", textAlign: "center",
-                letterSpacing: "0.3px", transition: "opacity 0.15s",
-              }}
-              onMouseEnter={e => (e.currentTarget.style.opacity = "0.88")}
-              onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
-            >
-              Download {WINDOWS_WORKER_DOWNLOAD.version}
-            </a>
-            <div style={{ marginTop: 12, fontSize: 11, color: "var(--text-muted)", fontFamily: "monospace", wordBreak: "break-all" }}>
-              {WINDOWS_WORKER_DOWNLOAD.filename}
-            </div>
-          </motion.div>
+        {/* ── Download cards ─────────────────────────────────────────────────── */}
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            justifyContent: "center",
+            gap: 16,
+            maxWidth: 980,
+            margin: "0 auto",
+          }}
+        >
+          {DESKTOP_WORKER_DOWNLOADS_LIST.map((dl, i) => (
+            <DownloadCard key={dl.label} dl={dl} delay={0.07 + i * 0.05} />
+          ))}
         </div>
 
         <div style={{ marginTop: 20, fontSize: 12, color: "var(--text-muted)", fontWeight: 700 }}>
@@ -280,21 +318,30 @@ export default function DownloadPage() {
           Download takes 2 minutes. You can be earning $LOCK before your next coffee.
         </p>
         <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-          <a
-            href={WINDOWS_WORKER_DOWNLOAD.url}
-            download={WINDOWS_WORKER_DOWNLOAD.filename}
-            style={{
-              display: "inline-block",
-              background: "#FFFFFF", color: "#000",
-              border: "none", borderRadius: 8,
-              padding: "13px 32px", fontSize: 14, fontWeight: 800,
-              textDecoration: "none", letterSpacing: "0.2px", transition: "opacity 0.15s",
-            }}
-            onMouseEnter={e => (e.currentTarget.style.opacity = "0.88")}
-            onMouseLeave={e => (e.currentTarget.style.opacity = "1")}
-          >
-            Download for Windows
-          </a>
+          {DESKTOP_WORKER_DOWNLOADS_LIST.map((dl) => (
+            <a
+              key={dl.label}
+              href={dl.url}
+              download={dl.filename}
+              style={{
+                display: "inline-block",
+                background: dl.label === "Windows" ? "#FFFFFF" : "var(--bg-3)",
+                color: dl.label === "Windows" ? "#000" : "var(--text-primary)",
+                border: dl.label === "Windows" ? "none" : "1px solid var(--border-2)",
+                borderRadius: 8,
+                padding: "13px 24px",
+                fontSize: 14,
+                fontWeight: 800,
+                textDecoration: "none",
+                letterSpacing: "0.2px",
+                transition: "opacity 0.15s",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.opacity = "0.88")}
+              onMouseLeave={(e) => (e.currentTarget.style.opacity = "1")}
+            >
+              Download for {dl.label}
+            </a>
+          ))}
           <Link href="/docs" style={{
             display: "inline-block",
             background: "transparent", color: "var(--text-secondary)",
