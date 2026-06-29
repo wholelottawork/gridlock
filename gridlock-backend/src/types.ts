@@ -93,3 +93,46 @@ export interface LiveEvent {
   worker: string;
   ts: number;
 }
+
+export interface ApiKeyRecord {
+  id: string;
+  key_hash: string;
+  key_prefix: string;
+  owner_wallet: string;
+  name: string;
+  default_sla: string;
+  tee_required: boolean;
+  allowed_ips: string[] | null;
+  request_count: number;
+  is_active: boolean;
+  created_at: string;
+  last_used_at: string | null;
+}
+
+/** Public API key row (never includes hash or secret). */
+export type ApiKeyPublic = Omit<ApiKeyRecord, "key_hash" | "is_active">;
+
+export interface ApiKeyContext {
+  id: string;
+  owner_wallet: string;
+  key_prefix: string;
+  default_sla: string;
+  tee_required: boolean;
+  allowed_ips: string[] | null;
+  source: "database" | "env";
+}
+
+export interface CreateApiKeyRequest {
+  name: string;
+  kind?: "prod" | "dev";
+  default_sla?: string;
+  tee_required?: boolean;
+  allowed_ips?: string[];
+}
+
+export interface UpdateApiKeyRequest {
+  name?: string;
+  default_sla?: string;
+  tee_required?: boolean;
+  allowed_ips?: string[] | null;
+}

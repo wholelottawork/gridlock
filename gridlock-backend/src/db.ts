@@ -1,6 +1,6 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { config } from "./config.js";
-import type { JobRecord, WorkerRecord } from "./types.js";
+import type { ApiKeyRecord, JobRecord, WorkerRecord } from "./types.js";
 
 let sbClient: SupabaseClient | null = null;
 
@@ -127,5 +127,189 @@ export async function dbLoadWorkers(): Promise<WorkerRecord[]> {
 }
 
 export function supabaseConfigured(): boolean {
-  return Boolean(config.supabaseUrl);
+  return Boolean(config.supabaseUrl && config.supabaseKey);
+}
+
+function toApiKeyRecord(row: Record<string, unknown>): ApiKeyRecord {
+  return {
+    id: String(row.id),
+    key_hash: String(row.key_hash),
+    key_prefix: String(row.key_prefix),
+    owner_wallet: String(row.owner_wallet),
+    name: String(row.name),
+    default_sla: String(row.default_sla),
+    tee_required: Boolean(row.tee_required),
+    allowed_ips: Array.isArray(row.allowed_ips) ? row.allowed_ips.map(String) : null,
+    request_count: Number(row.request_count ?? 0),
+    is_active: Boolean(row.is_active),
+    created_at: String(row.created_at),
+    last_used_at: row.last_used_at ? String(row.last_used_at) : null,
+  };
+}
+
+export function toPublicApiKey(row: ApiKeyRecord) {
+  const { key_hash: _h, is_active: _a, ...rest } = row;
+  return rest;
+}
+
+export async function dbHasActiveApiKeys(): Promise<boolean> {
+  const sb = getClient();
+  if (!sb) return false;
+  try {
+    const { count, error } = await sb
+      .from("api_keys")
+      .select("id", { count: "exact", head: true })
+      .eq("is_active", true);
+    if (error) throw error;
+    return (count ?? 0) > 0;
+  } catch (error) {
+    console.log(`[supabase] has_active_api_keys failed: ${formatSupabaseError(error)}`);
+    return false;
+  }
+}
+
+export async function dbGetApiKeyByHash(keyHash: string): Promise<ApiKeyRecord | null> {
+  const sb = getClient();
+  if (!sb) return null;
+  try {
+    const { data, error } = await sb
+      .from("api_keys")
+      .select("*")
+      .eq("key_hash", keyHash)
+      .eq("is_active", true)
+      .maybeSingle();
+    if (error) throw error;
+    return data ? toApiKeyRecord(data as Record<string, unknown>) : null;
+  } catch (error) {
+    console.log(`[supabase] get_api_key failed: ${formatSupabaseError(error)}`);
+    return null;
+  }
+}
+
+export async function dbListApiKeysByWallet(wallet: string): Promise<ApiKeyRecord[]> {
+  const sb = getClient();
+  if (!sb) return [];
+  try {
+    const { data, error } = await sb
+      .from("api_keys")
+      .select("*")
+      .eq("owner_wallet", wallet)
+      .eq("is_active", true)
+      .order("created_at", { ascending: false });
+    if (error) throw error;
+    return (data ?? []).map((row) => toApiKeyRecord(row as Record<string, unknown>));
+  } catch (error) {
+    console.log(`[supabase] list_api_keys failed: ${formatSupabaseError(error)}`);
+    return [];
+  }
+}
+
+export async function dbGetApiKeyById(id: string, wallet: string): Promise<ApiKeyRecord | null> {
+  const sb = getClient();
+  if (!sb) return null;
+  try {
+    const { data, error } = await sb
+      .from("api_keys")
+      .select("*")
+      .eq("id", id)
+      .eq("owner_wallet", wallet)
+      .eq("is_active", true)
+      .maybeSingle();
+    if (error) throw error;
+    return data ? toApiKeyRecord(data as Record<string, unknown>) : null;
+  } catch (error) {
+    console.log(`[supabase] get_api_key_by_id failed: ${formatSupabaseError(error)}`);
+    return null;
+  }
+}
+
+export async function dbInsertApiKey(
+  row: Omit<ApiKeyRecord, "id" | "request_count" | "is_active" | "created_at" | "last_used_at">,
+): Promise<ApiKeyRecord | null> {
+  const sb = getClient();
+  if (!sb) return null;
+  try {
+    const { data, error } = await sb
+      .from("api_keys")
+      .insert({
+        key_hash: row.key_hash,
+        key_prefix: row.key_prefix,
+        owner_wallet: row.owner_wallet,
+        name: row.name,
+        default_sla: row.default_sla,
+        tee_required: row.tee_required,
+        allowed_ips: row.allowed_ips,
+      })
+      .select("*")
+      .single();
+    if (error) throw error;
+    return toApiKeyRecord(data as Record<string, unknown>);
+  } catch (error) {
+    console.log(`[supabase] insert_api_key failed: ${formatSupabaseError(error)}`);
+    return null;
+  }
+}
+
+export async function dbUpdateApiKey(
+  id: string,
+  wallet: string,
+  patch: Partial<Pick<ApiKeyRecord, "name" | "default_sla" | "tee_required" | "allowed_ips">>,
+): Promise<ApiKeyRecord | null> {
+  const sb = getClient();
+  if (!sb) return null;
+  try {
+    const { data, error } = await sb
+      .from("api_keys")
+      .update(patch)
+      .eq("id", id)
+      .eq("owner_wallet", wallet)
+      .eq("is_active", true)
+      .select("*")
+      .maybeSingle();
+    if (error) throw error;
+    return data ? toApiKeyRecord(data as Record<string, unknown>) : null;
+  } catch (error) {
+    console.log(`[supabase] update_api_key failed: ${formatSupabaseError(error)}`);
+    return null;
+  }
+}
+
+export async function dbRevokeApiKey(id: string, wallet: string): Promise<boolean> {
+  const sb = getClient();
+  if (!sb) return false;
+  try {
+    const { error } = await sb
+      .from("api_keys")
+      .update({ is_active: false })
+      .eq("id", id)
+      .eq("owner_wallet", wallet)
+      .eq("is_active", true);
+    if (error) throw error;
+    return true;
+  } catch (error) {
+    console.log(`[supabase] revoke_api_key failed: ${formatSupabaseError(error)}`);
+    return false;
+  }
+}
+
+export async function dbIncrementApiKeyUsage(id: string): Promise<void> {
+  const sb = getClient();
+  if (!sb || id === "env") return;
+  try {
+    const { data, error: readError } = await sb
+      .from("api_keys")
+      .select("request_count")
+      .eq("id", id)
+      .maybeSingle();
+    if (readError) throw readError;
+    if (!data) return;
+    const next = Number((data as { request_count: number }).request_count ?? 0) + 1;
+    const { error } = await sb
+      .from("api_keys")
+      .update({ request_count: next, last_used_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) throw error;
+  } catch (error) {
+    console.log(`[supabase] increment_api_key_usage failed: ${formatSupabaseError(error)}`);
+  }
 }

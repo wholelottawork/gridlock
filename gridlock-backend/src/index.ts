@@ -1,11 +1,14 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { config, OPEN_PATHS } from "./config.js";
+import { config } from "./config.js";
+import "./hono-context.js";
 import { getRedis } from "./cache.js";
 import { dbLoadJobs, dbLoadWorkers } from "./db.js";
+import { apiKeyAuthMiddleware } from "./middleware/api-key-auth.js";
 import { chatRoutes } from "./routes/chat.js";
 import { jobRoutes } from "./routes/jobs.js";
+import { keyRoutes } from "./routes/keys.js";
 import { liveRoutes } from "./routes/live.js";
 import { statsRoutes } from "./routes/stats.js";
 import { workerRoutes } from "./routes/workers.js";
@@ -18,31 +21,17 @@ app.use(
   "*",
   cors({
     origin: "*",
-    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowHeaders: ["*"],
   }),
 );
 
-app.use("*", async (c, next) => {
-  const path = c.req.path;
-  const workerPublic =
-    path === "/v1/workers/register"
-    || path === "/v1/workers/heartbeat"
-    || path.startsWith("/v1/workers/")
-    || path.startsWith("/v1/jobs");
-  if (!config.apiKeys.size || OPEN_PATHS.has(path) || workerPublic) {
-    return next();
-  }
-  const key = (c.req.header("Authorization") ?? "").replace(/^Bearer\s+/i, "").trim();
-  if (!config.apiKeys.has(key)) {
-    return c.json({ error: "Invalid or missing API key" }, 401);
-  }
-  return next();
-});
+app.use("*", apiKeyAuthMiddleware);
 
 app.route("/", chatRoutes);
 app.route("/", jobRoutes);
 app.route("/", workerRoutes);
+app.route("/", keyRoutes);
 app.route("/", statsRoutes);
 app.route("/", liveRoutes);
 

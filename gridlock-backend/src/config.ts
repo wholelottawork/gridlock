@@ -28,6 +28,8 @@ export const config = {
   supabaseUrl: process.env.SUPABASE_URL ?? "",
   supabaseKey: process.env.SUPABASE_KEY ?? "",
   watcherSampleRate: Number(process.env.WATCHER_SAMPLE_RATE ?? "0.05"),
+  /** Dev only: skip wallet signatures on /v1/keys (trust X-Gridlock-Wallet header). */
+  insecureKeyManagement: process.env.GRIDLOCK_INSECURE_KEY_MANAGEMENT === "true",
   apiKeys: new Set(
     (process.env.API_KEYS ?? "")
       .split(",")

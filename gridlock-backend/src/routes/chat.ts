@@ -4,6 +4,8 @@ import { streamSSE } from "hono/streaming";
 import { resolveJobAttestation, slaMetWithAttestation } from "../attestation.js";
 import { config, computeFee, PENALTY_MULT, SLA_TARGETS } from "../config.js";
 import { cacheSetTtl, cacheWarmCheck } from "../cache.js";
+import { dbIncrementApiKeyUsage } from "../db.js";
+import { getApiKeyContext } from "../middleware/api-key-auth.js";
 import { settleJob, watcherSample } from "../settlement.js";
 import { anchorAssignWorker, anchorOpenJob } from "../solana-settlement.js";
 import { appendJob } from "../state.js";
@@ -77,15 +79,35 @@ function finalizeAttestation(params: {
 chatRoutes.post("/v1/chat/completions", async (c) => {
   const req = (await c.req.json()) as ChatCompletionRequest;
   const jobId = randomUUID();
-  const slaTier = req.gridlock?.sla && SLA_TARGETS[req.gridlock.sla] ? req.gridlock.sla : "standard";
-  const confidential = (req.gridlock?.privacy ?? false) || slaTier === "confidential";
+  const apiKey = getApiKeyContext(c);
+
+  const slaFromRequest =
+    req.gridlock?.sla && SLA_TARGETS[req.gridlock.sla] ? req.gridlock.sla : null;
+  const slaTier =
+    slaFromRequest
+    ?? (apiKey?.default_sla && SLA_TARGETS[apiKey.default_sla] ? apiKey.default_sla : "standard");
+
+  let confidential = (req.gridlock?.privacy ?? false) || slaTier === "confidential";
+  if (apiKey?.tee_required && !confidential) {
+    return c.json(
+      { error: "This API key requires confidential (TEE) requests. Set gridlock.privacy: true." },
+      403,
+    );
+  }
+  if (apiKey?.tee_required) confidential = true;
+
   const prompt = req.messages.map((m) => m.content).join(" ");
   const promptTokens = prompt.split(/\s+/).filter(Boolean).length;
   const fee = computeFee(req.model, slaTier, promptTokens);
   const targetTtft = SLA_TARGETS[slaTier]!.ttft;
   const targetTpot = SLA_TARGETS[slaTier]!.tpot;
   const auth = c.req.header("Authorization") ?? "";
-  const customer = auth.replace(/^Bearer\s+/i, "").slice(0, 12) || "anonymous";
+  const customer =
+    (apiKey?.owner_wallet ?? auth.replace(/^Bearer\s+/i, "").slice(0, 12)) || "anonymous";
+
+  if (apiKey?.source === "database") {
+    void dbIncrementApiKeyUsage(apiKey.id);
+  }
 
   const prefixKey = hashPrefix(prompt);
   const warm = await cacheWarmCheck(prefixKey);
@@ -94,6 +116,7 @@ chatRoutes.post("/v1/chat/completions", async (c) => {
   if (!worker) {
     return c.json(noWorkerResponse(confidential), 503);
   }
+  const workerAddress = worker.address;
 
   const tryWsDispatch = !req.stream && workerHub.getIdleSession(worker.address);
 
@@ -101,7 +124,7 @@ chatRoutes.post("/v1/chat/completions", async (c) => {
     if (!config.solanaSettlementEnabled) return;
     try {
       await anchorOpenJob(jobId, slaTier, fee, confidential);
-      await anchorAssignWorker(jobId, worker.address);
+      await anchorAssignWorker(jobId, workerAddress);
     } catch (err) {
       console.log(`[chat] solana anchor failed: ${err instanceof Error ? err.message : err}`);
     }
