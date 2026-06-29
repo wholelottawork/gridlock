@@ -20,12 +20,16 @@ function envKeyContext(token: string): ApiKeyContext {
   };
 }
 
-function isWorkerPublicPath(path: string): boolean {
+function isPublicReadPath(path: string): boolean {
   return (
-    path === "/v1/workers/register"
+    path === "/v1/workers"
+    || path === "/v1/workers/register"
     || path === "/v1/workers/heartbeat"
     || path.startsWith("/v1/workers/")
     || path.startsWith("/v1/jobs")
+    || path.startsWith("/v1/stats/")
+    || path === "/v1/leaderboard"
+    || path === "/v1/autoscale/signal"
   );
 }
 
@@ -59,7 +63,7 @@ export async function resolveApiKeyContext(token: string): Promise<ApiKeyContext
 export async function apiKeyAuthMiddleware(c: Context, next: Next): Promise<Response | void> {
   const path = c.req.path;
 
-  if (isKeyManagementPath(path) || isWorkerPublicPath(path)) {
+  if (isKeyManagementPath(path) || isPublicReadPath(path)) {
     return next();
   }
 
