@@ -355,6 +355,71 @@ export async function fetchModelPricing(): Promise<{ models: ApiModelPricing[]; 
   return get("/v1/models");
 }
 
+// ─── Staking (read-only) ─────────────────────────────────────────────────────
+
+export interface StakeInfo {
+  lock_mint: string | null;
+  staker_pool_address: string | null;
+  staker_pool_lock: number;
+  staker_pool_exists: boolean;
+  fee_vault_address: string | null;
+  fee_vault_lock: number;
+  fee_vault_exists: boolean;
+  total_penalties_lock: number;
+  lock_burned: number;
+  revenue_split: {
+    stakers_pct: number;
+    workers_pct: number;
+    burn_pct: number;
+    treasury_pct: number;
+  };
+  target_apy_pct: number;
+  epoch_days: number;
+  staking_deposit_enabled: boolean;
+  solana_cluster: string;
+  solana_settlement_enabled: boolean;
+}
+
+export interface StakePosition {
+  wallet: string;
+  staked_lock: number;
+  staker_vault_authority: string | null;
+  staker_vault_ata: string | null;
+  staker_vault_exists: boolean;
+  pending_unstake_lock: number;
+  multiplier_tier: {
+    label: string;
+    mult: number;
+    min_lock: number;
+    max_lock: number;
+  };
+  estimated_daily_apy_lock: number;
+  worker: {
+    registered: boolean;
+    staked_lock?: number;
+    role?: string;
+    status?: string;
+    sla_pass_rate?: number;
+  };
+  staking_deposit_enabled: boolean;
+}
+
+export async function fetchStakeInfo(): Promise<StakeInfo> {
+  return get("/v1/stake/info");
+}
+
+export async function fetchStakePosition(wallet: string): Promise<StakePosition> {
+  const qs = new URLSearchParams({ wallet });
+  return get(`/v1/stake/position?${qs}`);
+}
+
+export async function fetchStakePositionWithSession(
+  wallet: string,
+  sessionToken: string,
+): Promise<StakePosition> {
+  return get("/v1/stake/position", sessionReadHeaders(wallet, sessionToken));
+}
+
 // ─── Chat ────────────────────────────────────────────────────────────────────
 
 /** Send a chat completion. Pass the full conversation in `messages` — workers are stateless. */

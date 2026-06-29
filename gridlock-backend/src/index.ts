@@ -12,6 +12,7 @@ import { chatRoutes } from "./routes/chat.js";
 import { jobRoutes } from "./routes/jobs.js";
 import { keyRoutes } from "./routes/keys.js";
 import { liveRoutes } from "./routes/live.js";
+import { stakeRoutes } from "./routes/stake.js";
 import { statsRoutes } from "./routes/stats.js";
 import { workerRoutes } from "./routes/workers.js";
 import { attachWebSocketServer } from "./ws/attach.js";
@@ -37,6 +38,7 @@ app.route("/", workerRoutes);
 app.route("/", keyRoutes);
 app.route("/", authRoutes);
 app.route("/", billingRoutes);
+app.route("/", stakeRoutes);
 app.route("/", statsRoutes);
 app.route("/", liveRoutes);
 

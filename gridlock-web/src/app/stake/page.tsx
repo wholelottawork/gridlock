@@ -1,18 +1,22 @@
 ﻿"use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
 import { getAssociatedTokenAddressSync, getAccount, TOKEN_2022_PROGRAM_ID } from "@solana/spl-token";
+import {
+  fetchStakeInfo,
+  fetchStakePosition,
+  type StakeInfo,
+  type StakePosition,
+} from "@/lib/api-client";
 
 const LOCK_MINT = process.env.NEXT_PUBLIC_LOCK_MINT ?? "";
 
 /** On-chain passive staking (deposit / unstake) — Phase C. */
 const STAKING_ACTIONS_ENABLED = false;
-
-const PROTOCOL_APY = "8%";
 
 const multiplierTiers = [
   { min: 0, max: 4999, mult: "1.0x", label: "Base", color: "var(--text-secondary)" },
@@ -28,29 +32,76 @@ const workerTierCollateral = [
   { tier: "Confidential", collateral: 20000, ttft: "< 800ms + TEE", penalty: "1x + slash" },
 ];
 
-function formatLock(amount: number | null, loading: boolean): string {
+function formatLock(amount: number | null | undefined, loading = false): string {
   if (loading) return "…";
-  if (amount === null) return "—";
+  if (amount == null) return "—";
   return amount.toLocaleString(undefined, { maximumFractionDigits: 4 });
+}
+
+function tierColor(label: string): string {
+  return multiplierTiers.find((t) => t.label === label)?.color ?? "var(--text-muted)";
 }
 
 export default function StakePage() {
   const { publicKey, connected } = useWallet();
   const { connection } = useConnection();
-  const [mounted, setMounted] = useState(false);
+  const wallet = publicKey?.toBase58() ?? null;
 
+  const [mounted, setMounted] = useState(false);
   const [stakeAmount, setStakeAmount] = useState("");
   const [unstakeAmount, setUnstakeAmount] = useState("");
   const [lockBalance, setLockBalance] = useState<number | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(false);
   const [balanceError, setBalanceError] = useState<string | null>(null);
 
-  /** Passive staker vault balance — 0 until on-chain staking is wired (Phase B/C). */
-  const stakedLock = connected && mounted ? 0 : null;
+  const [poolInfo, setPoolInfo] = useState<StakeInfo | null>(null);
+  const [position, setPosition] = useState<StakePosition | null>(null);
+  const [infoLoading, setInfoLoading] = useState(true);
+  const [positionLoading, setPositionLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  const loadPoolInfo = useCallback(async () => {
+    try {
+      const info = await fetchStakeInfo();
+      setPoolInfo(info);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Failed to load staking info");
+    } finally {
+      setInfoLoading(false);
+    }
+  }, []);
+
+  const loadPosition = useCallback(async () => {
+    if (!wallet) {
+      setPosition(null);
+      return;
+    }
+    setPositionLoading(true);
+    setLoadError(null);
+    try {
+      const pos = await fetchStakePosition(wallet);
+      setPosition(pos);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : "Failed to load staking position");
+      setPosition(null);
+    } finally {
+      setPositionLoading(false);
+    }
+  }, [wallet]);
+
+  useEffect(() => {
+    void loadPoolInfo();
+    const id = setInterval(() => void loadPoolInfo(), 30_000);
+    return () => clearInterval(id);
+  }, [loadPoolInfo]);
+
+  useEffect(() => {
+    void loadPosition();
+  }, [loadPosition]);
 
   useEffect(() => {
     if (!publicKey || !LOCK_MINT) {
@@ -75,14 +126,19 @@ export default function StakePage() {
     })();
   }, [publicKey, connection]);
 
+  const stakedLock = position?.staked_lock ?? null;
   const walletBalance = connected ? lockBalance : null;
   const stakeNum = parseFloat(stakeAmount) || 0;
   const previewStakeTotal = (stakedLock ?? 0) + stakeNum;
   const previewTier =
     multiplierTiers.find((t) => previewStakeTotal >= t.min && previewStakeTotal <= t.max) ?? multiplierTiers[0];
+  const currentTier = position?.multiplier_tier;
+  const targetApy = poolInfo ? `${poolInfo.target_apy_pct}%` : "—";
+  const dailyApy = position?.estimated_daily_apy_lock ?? 0;
 
   const isWalletRequired = mounted && !connected;
   const walletBalanceLive = mounted && connected && !balanceLoading && lockBalance !== null && !balanceError;
+  const stakedLive = mounted && connected && !positionLoading && position != null;
 
   return (
     <motion.div
@@ -94,10 +150,26 @@ export default function StakePage() {
       <div style={{ marginBottom: 28 }}>
         <h1 style={{ fontSize: 22, fontWeight: 800, marginBottom: 4, letterSpacing: "-0.3px" }}>Stake $LOCK</h1>
         <p style={{ fontSize: 13, color: "var(--text-muted)", fontWeight: 700, lineHeight: 1.6 }}>
-          Passive staking earns a share of network fees (60% staker pool) at a target {PROTOCOL_APY} APY.
-          On-chain deposit and unstake are not live yet — your wallet balance below is read from devnet.
+          Passive staking earns a share of network fees ({poolInfo?.revenue_split.stakers_pct ?? 60}% staker pool) at a
+          target {targetApy} APY. Pool balances are read from devnet; deposit / unstake ship in Phase C.
         </p>
       </div>
+
+      {loadError && (
+        <div
+          style={{
+            marginBottom: 14,
+            padding: "10px 16px",
+            borderRadius: 6,
+            background: "rgba(255,60,60,0.05)",
+            border: "1px solid rgba(255,60,60,0.2)",
+            fontSize: 12,
+            color: "var(--red)",
+          }}
+        >
+          {loadError}
+        </div>
+      )}
 
       {!STAKING_ACTIONS_ENABLED && mounted && (
         <div
@@ -112,8 +184,8 @@ export default function StakePage() {
             lineHeight: 1.6,
           }}
         >
-          <strong style={{ color: "var(--orange)" }}>Staking actions coming soon.</strong>{" "}
-          Fee split and APY match the on-chain FeeCollector program; stake / unstake transactions will ship in the next phase.
+          <strong style={{ color: "var(--orange)" }}>Staking actions coming soon (Phase C).</strong> Pool and position
+          data below is live from the API and Solana RPC.
         </div>
       )}
 
@@ -130,7 +202,7 @@ export default function StakePage() {
             fontWeight: 700,
           }}
         >
-          Connect your wallet (top right) to see your $LOCK wallet balance.
+          Connect your wallet to see your staked balance and wallet $LOCK.
         </div>
       )}
 
@@ -163,36 +235,36 @@ export default function StakePage() {
             fontWeight: 700,
           }}
         >
-          Set <code>NEXT_PUBLIC_LOCK_MINT</code> in <code>.env.local</code> to read wallet balances.
+          Set <code>NEXT_PUBLIC_LOCK_MINT</code> in <code>.env.local</code> to read wallet balances on-chain.
         </div>
       )}
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 12, marginBottom: 24 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12, marginBottom: 24 }}>
         {[
           {
             label: "YOUR STAKED $LOCK",
-            value: formatLock(stakedLock, false),
+            value: formatLock(stakedLock, positionLoading),
             accent: "var(--orange)",
-            badge: connected ? "NOT STAKED" : null,
-            badgeColor: "var(--text-muted)",
+            badge: stakedLive ? (stakedLock && stakedLock > 0 ? "LIVE" : "NOT STAKED") : null,
+            badgeColor: stakedLock && stakedLock > 0 ? "var(--green)" : "var(--text-muted)",
           },
           {
             label: "WALLET BALANCE",
             value: formatLock(walletBalance, balanceLoading),
             accent: "var(--text-primary)",
-            badge: walletBalanceLive ? "LIVE" : connected ? null : null,
+            badge: walletBalanceLive ? "LIVE" : null,
             badgeColor: "var(--green)",
           },
           {
             label: "EARNINGS MULTIPLIER",
-            value: stakedLock === 0 ? "—" : previewTier.mult,
-            accent: "var(--text-muted)",
-            badge: "PLANNED",
+            value: currentTier ? `${currentTier.mult}x` : stakedLive ? "1.0x" : "—",
+            accent: currentTier ? tierColor(currentTier.label) : "var(--text-muted)",
+            badge: currentTier && stakedLock && stakedLock > 0 ? currentTier.label.toUpperCase() : "PLANNED",
             badgeColor: "var(--text-muted)",
           },
           {
             label: "TARGET APY",
-            value: PROTOCOL_APY,
+            value: infoLoading ? "…" : targetApy,
             accent: "var(--green)",
             badge: "ON-CHAIN",
             badgeColor: "var(--text-muted)",
@@ -218,6 +290,57 @@ export default function StakePage() {
         ))}
       </div>
 
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12, marginBottom: 24 }}>
+        {[
+          {
+            label: "STAKER POOL (TVL)",
+            value: formatLock(poolInfo?.staker_pool_lock, infoLoading),
+            sub: poolInfo?.staker_pool_exists ? "On-chain vault" : "Vault not found",
+          },
+          {
+            label: "PENALTIES (MTD)",
+            value: formatLock(poolInfo?.total_penalties_lock, infoLoading),
+            sub: "From job records",
+          },
+          {
+            label: "LOCK BURNED",
+            value: formatLock(poolInfo?.lock_burned, infoLoading),
+            sub: "Settlement + fee split",
+          },
+        ].map((s) => (
+          <div key={s.label} className="card">
+            <div
+              style={{
+                fontSize: 10,
+                color: "var(--text-muted)",
+                fontWeight: 700,
+                letterSpacing: "1px",
+                marginBottom: 10,
+              }}
+            >
+              {s.label}
+            </div>
+            <div style={{ fontSize: 24, fontWeight: 900, color: "var(--orange)" }}>{s.value}</div>
+            <div style={{ fontSize: 10, color: "var(--text-muted)", marginTop: 6 }}>{s.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {position?.worker.registered && (
+        <div
+          className="card"
+          style={{ marginBottom: 24, borderColor: "rgba(255,255,255,0.12)", padding: "14px 18px" }}
+        >
+          <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>
+            You are registered as a worker ({position.worker.role}, {position.worker.status})
+          </div>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6 }}>
+            Worker collateral: {formatLock(position.worker.staked_lock)} $LOCK · SLA pass{" "}
+            {position.worker.sla_pass_rate?.toFixed(1)}%. Worker stake is separate from passive staker pool deposits.
+          </div>
+        </div>
+      )}
+
       <div className="card card-orange" style={{ marginBottom: 24 }}>
         <div
           style={{
@@ -228,24 +351,25 @@ export default function StakePage() {
             marginBottom: 14,
           }}
         >
-          FEE REVENUE SPLIT (PROTOCOL)
+          FEE REVENUE SPLIT (PROTOCOL · {poolInfo?.revenue_split.stakers_pct ?? 60}/{poolInfo?.revenue_split.workers_pct ?? 20}/
+          {poolInfo?.revenue_split.burn_pct ?? 10}/{poolInfo?.revenue_split.treasury_pct ?? 10})
         </div>
         <div style={{ display: "flex", borderRadius: 3, overflow: "hidden", height: 6 }}>
           {[
-            { pct: 60, color: "var(--orange)" },
-            { pct: 20, color: "var(--orange-2)" },
-            { pct: 10, color: "var(--orange-3)" },
-            { pct: 10, color: "var(--bg-4)" },
+            { pct: poolInfo?.revenue_split.stakers_pct ?? 60, color: "var(--orange)" },
+            { pct: poolInfo?.revenue_split.workers_pct ?? 20, color: "var(--orange-2)" },
+            { pct: poolInfo?.revenue_split.burn_pct ?? 10, color: "var(--orange-3)" },
+            { pct: poolInfo?.revenue_split.treasury_pct ?? 10, color: "var(--bg-4)" },
           ].map((s, i) => (
             <div key={i} style={{ flex: s.pct, background: s.color }} />
           ))}
         </div>
         <div style={{ display: "flex", gap: 24, marginTop: 12, flexWrap: "wrap" }}>
           {[
-            { label: "60% STAKERS", color: "var(--orange)" },
-            { label: "20% WORKERS", color: "var(--orange-2)" },
-            { label: "10% BURN", color: "var(--orange-3)" },
-            { label: "10% TREASURY", color: "var(--text-muted)" },
+            { label: `${poolInfo?.revenue_split.stakers_pct ?? 60}% STAKERS`, color: "var(--orange)" },
+            { label: `${poolInfo?.revenue_split.workers_pct ?? 20}% WORKERS`, color: "var(--orange-2)" },
+            { label: `${poolInfo?.revenue_split.burn_pct ?? 10}% BURN`, color: "var(--orange-3)" },
+            { label: `${poolInfo?.revenue_split.treasury_pct ?? 10}% TREASURY`, color: "var(--text-muted)" },
           ].map((s) => (
             <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <div style={{ width: 8, height: 8, borderRadius: 2, background: s.color }} />
@@ -339,7 +463,7 @@ export default function StakePage() {
             </button>
             <div style={{ fontSize: 11, color: "var(--text-muted)", textAlign: "center" }}>
               {stakedLock && stakedLock > 0
-                ? `Est. ~${((stakedLock * 0.08) / 365).toFixed(2)} $LOCK/day at ${PROTOCOL_APY} APY`
+                ? `Est. ~${dailyApy.toFixed(4)} $LOCK/day at ${targetApy} APY`
                 : "Stake on-chain to earn from the staker pool."}
             </div>
           </div>
@@ -370,7 +494,8 @@ export default function StakePage() {
                 style={{ width: "100%" }}
               />
               <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 5 }}>
-                Staked: {formatLock(stakedLock, false)} $LOCK
+                Staked: {formatLock(stakedLock, positionLoading)} $LOCK
+                {position?.pending_unstake_lock ? ` · Pending: ${position.pending_unstake_lock} $LOCK` : ""}
               </div>
             </div>
 
@@ -383,11 +508,11 @@ export default function StakePage() {
               }}
             >
               <div style={{ fontSize: 12, fontWeight: 700, color: "var(--text-secondary)", marginBottom: 4 }}>
-                7-day cooldown (planned)
+                {poolInfo?.epoch_days ?? 7}-day epoch (on-chain)
               </div>
               <div style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.6 }}>
-                Unstake requests will enter a cooldown before $LOCK returns to your wallet. Matches the on-chain epoch
-                reward schedule in FeeCollector.
+                Unstake with cooldown will arrive in Phase C. Epoch rewards in FeeCollector match a{" "}
+                {poolInfo?.epoch_days ?? 7}-day schedule.
               </div>
             </div>
 
@@ -423,39 +548,56 @@ export default function StakePage() {
           Higher passive stake will boost your share of staker-pool rewards once multipliers are enabled on-chain.
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
-          {multiplierTiers.map((t) => (
-            <div
-              key={t.label}
-              style={{
-                background: "var(--bg-3)",
-                border: "1px solid var(--border)",
-                borderRadius: 6,
-                padding: "16px",
-                textAlign: "center",
-              }}
-            >
+          {multiplierTiers.map((t) => {
+            const active = currentTier?.label === t.label && (stakedLock ?? 0) > 0;
+            return (
               <div
+                key={t.label}
                 style={{
-                  fontSize: 10,
-                  color: t.color,
-                  fontWeight: 700,
-                  letterSpacing: "0.5px",
-                  marginBottom: 6,
+                  background: active ? "var(--orange-dim)" : "var(--bg-3)",
+                  border: active ? "1px solid var(--orange-border)" : "1px solid var(--border)",
+                  borderRadius: 6,
+                  padding: "16px",
+                  textAlign: "center",
                 }}
               >
-                {t.label.toUpperCase()}
+                <div
+                  style={{
+                    fontSize: 10,
+                    color: t.color,
+                    fontWeight: 700,
+                    letterSpacing: "0.5px",
+                    marginBottom: 6,
+                  }}
+                >
+                  {t.label.toUpperCase()}
+                </div>
+                <div style={{ fontSize: 28, fontWeight: 900, color: t.color }}>{t.mult}</div>
+                <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>
+                  {t.min === 0 ? `0 – ${(t.max / 1000).toFixed(0)}K` : `${(t.min / 1000).toFixed(0)}K+`} $LOCK
+                </div>
+                {active && (
+                  <div style={{ marginTop: 8, fontSize: 11, color: "var(--orange)", fontWeight: 700 }}>
+                    Current tier
+                  </div>
+                )}
               </div>
-              <div style={{ fontSize: 28, fontWeight: 900, color: t.color }}>{t.mult}</div>
-              <div style={{ fontSize: 11, color: "var(--text-muted)", marginTop: 6 }}>
-                {t.min === 0 ? `0 – ${(t.max / 1000).toFixed(0)}K` : `${(t.min / 1000).toFixed(0)}K+`} $LOCK
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
       <div className="card">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 16, marginBottom: 14, flexWrap: "wrap" }}>
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "flex-start",
+            gap: 16,
+            marginBottom: 14,
+            flexWrap: "wrap",
+          }}
+        >
           <div>
             <div
               style={{
@@ -469,8 +611,8 @@ export default function StakePage() {
               WORKER SLA COLLATERAL (OPERATORS)
             </div>
             <p style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.6, margin: 0, maxWidth: 560 }}>
-              This table is for GPU workers who serve inference — not passive stakers. Worker collateral is managed on
-              the Worker dashboard when registration supports on-chain stake.
+              For GPU workers who serve inference — not passive stakers. Manage worker registration on the Worker
+              dashboard.
             </p>
           </div>
           <Link

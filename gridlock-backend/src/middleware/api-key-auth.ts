@@ -34,7 +34,12 @@ function isPublicReadPath(path: string): boolean {
 }
 
 function isKeyManagementPath(path: string): boolean {
-  return path.startsWith("/v1/keys") || path.startsWith("/v1/billing") || path.startsWith("/v1/auth");
+  return (
+    path.startsWith("/v1/keys")
+    || path.startsWith("/v1/billing")
+    || path.startsWith("/v1/auth")
+    || path.startsWith("/v1/stake")
+  );
 }
 
 export async function authRequired(): Promise<boolean> {
