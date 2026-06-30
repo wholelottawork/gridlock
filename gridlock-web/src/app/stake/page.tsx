@@ -21,8 +21,6 @@ import {
 import { sendClaimUnstakeTransaction, sendLockStake } from "@/lib/lock-stake";
 import { INSECURE_KEY_MANAGEMENT, signGridlockKeysAction } from "@/lib/wallet-auth";
 
-const LOCK_MINT = process.env.NEXT_PUBLIC_LOCK_MINT ?? "";
-
 const multiplierTiers = [
   { min: 0, max: 4999, mult: "1.0x", label: "Base", color: "var(--text-secondary)" },
   { min: 5000, max: 14999, mult: "1.5x", label: "Bronze", color: "var(--yellow)" },
@@ -74,6 +72,7 @@ export default function StakePage() {
   const claimEnabled = poolInfo?.staking_claim_enabled ?? false;
   const minStake = poolInfo?.min_stake_lock ?? 1;
   const cooldownDays = poolInfo?.unstake_cooldown_days ?? 7;
+  const lockMint = poolInfo?.lock_mint ?? depositInfo?.lock_mint ?? "";
 
   const signAuth = useCallback(
     async (action: string) => {
@@ -135,7 +134,7 @@ export default function StakePage() {
   }, [loadPosition]);
 
   useEffect(() => {
-    if (!publicKey || !LOCK_MINT) {
+    if (!publicKey || !lockMint) {
       setLockBalance(null);
       setBalanceError(null);
       return;
@@ -144,7 +143,7 @@ export default function StakePage() {
     setBalanceError(null);
     void (async () => {
       try {
-        const mint = new PublicKey(LOCK_MINT);
+        const mint = new PublicKey(lockMint);
         const ata = getAssociatedTokenAddressSync(mint, publicKey, false, TOKEN_2022_PROGRAM_ID);
         const acct = await getAccount(connection, ata, "confirmed", TOKEN_2022_PROGRAM_ID);
         setLockBalance(Number(acct.amount) / 1e9);
@@ -155,7 +154,7 @@ export default function StakePage() {
         setBalanceLoading(false);
       }
     })();
-  }, [publicKey, connection]);
+  }, [publicKey, connection, lockMint]);
 
   const stakedLock = position?.staked_lock ?? null;
   const pendingUnstake = position?.pending_unstake ?? null;
@@ -412,7 +411,7 @@ export default function StakePage() {
         </div>
       )}
 
-      {!LOCK_MINT && mounted && (
+      {!lockMint && mounted && !infoLoading && (
         <div
           style={{
             marginBottom: 14,
@@ -425,7 +424,7 @@ export default function StakePage() {
             fontWeight: 700,
           }}
         >
-          Set <code>NEXT_PUBLIC_LOCK_MINT</code> in <code>.env.local</code> to read wallet balances on-chain.
+          Wallet balance unavailable — backend has no <code>LOCK_MINT</code> configured.
         </div>
       )}
 
