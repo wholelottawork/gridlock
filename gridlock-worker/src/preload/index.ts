@@ -94,6 +94,9 @@ const api = {
     minimize: () => ipcRenderer.invoke('window:minimize'),
     maximize: () => ipcRenderer.invoke('window:maximize'),
     close:    () => ipcRenderer.invoke('window:close')
+  },
+  app: {
+    openStakePage: (): Promise<void> => ipcRenderer.invoke('app:openStakePage')
   }
 }
 

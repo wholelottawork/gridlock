@@ -149,7 +149,7 @@ export default function StakePage() {
         setLockBalance(Number(acct.amount) / 1e9);
       } catch {
         setLockBalance(0);
-        setBalanceError("No $LOCK token account — get devnet $LOCK or use Billing to deposit.");
+        setBalanceError("No $LOCK token account — get $LOCK tokens or use Billing to deposit.");
       } finally {
         setBalanceLoading(false);
       }

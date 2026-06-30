@@ -1,9 +1,10 @@
 import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, shell, type NativeImage } from 'electron'
 import { join } from 'path'
 import { spawn, ChildProcess } from 'child_process'
-import { loadSettings, saveSettings, GRIDLOCK_API_URL, type WorkerSettings } from './settings.js'
-import { getDaemonScriptPath, getPythonExecutable, packagedDaemonEnv } from './python.js'
+import { loadSettings, saveSettings, GRIDLOCK_API_URL, GRIDLOCK_STAKE_URL, type WorkerSettings } from './settings.js'
+import { getDaemonScriptPath, getPythonExecutable, getPythonModuleDir, packagedDaemonEnv } from './python.js'
 import { registerSetupHandlers } from './setup.js'
+import { fetchWalletJobs, mergeWalletJobs, type WorkerJob } from './wallet-jobs.js'
 
 const isDev = !app.isPackaged
 let mainWindow: BrowserWindow | null = null
@@ -99,6 +100,7 @@ function startDaemon(settings = loadSettings()): void {
   try {
     daemon = spawn(pythonBin, args, {
       stdio: ['pipe', 'pipe', 'pipe'],
+      cwd: getPythonModuleDir(),
       env: packagedDaemonEnv({
         GRIDLOCK_BACKEND_URL: GRIDLOCK_API_URL,
         GRIDLOCK_WALLET: settings.wallet,
@@ -152,7 +154,27 @@ ipcMain.handle('worker:start', async () => {
   return fetchDaemon('/worker/start', 'POST').catch(() => ({ ok: false, error: 'daemon_unreachable' }))
 })
 ipcMain.handle('worker:stop',    () => fetchDaemon('/worker/stop', 'POST').catch(() => ({ ok: false })))
-ipcMain.handle('worker:jobs',    () => fetchDaemon('/jobs').catch(() => ({ jobs: [] })))
+ipcMain.handle('worker:jobs', async () => {
+  let localJobs: WorkerJob[] = []
+  try {
+    const daemon = (await fetchDaemon('/jobs')) as { jobs?: WorkerJob[] }
+    localJobs = daemon.jobs ?? []
+  } catch {
+    /* daemon offline */
+  }
+
+  const wallet = loadSettings().wallet.trim()
+  if (!isValidWallet(wallet)) {
+    return { jobs: localJobs }
+  }
+
+  try {
+    const remote = await fetchWalletJobs(wallet)
+    return { jobs: mergeWalletJobs(remote, localJobs) }
+  } catch {
+    return { jobs: localJobs }
+  }
+})
 ipcMain.handle('worker:earnings',() => fetchDaemon('/earnings').catch(() => ({ today: 0, week: 0, total: 0, history: [] })))
 ipcMain.handle('settings:load', () => loadSettings())
 async function syncWalletToDaemon(wallet: string): Promise<boolean> {
@@ -192,6 +214,8 @@ ipcMain.handle('settings:save', async (_e, cfg: WorkerSettings) => {
   if (!syncedWallet || !syncedConfig) startDaemon(cfg)
   return { ok: true }
 })
+
+ipcMain.handle('app:openStakePage', () => shell.openExternal(GRIDLOCK_STAKE_URL))
 
 ipcMain.handle('window:minimize', () => mainWindow?.minimize())
 ipcMain.handle('window:maximize', () => mainWindow?.isMaximized() ? mainWindow.restore() : mainWindow?.maximize())

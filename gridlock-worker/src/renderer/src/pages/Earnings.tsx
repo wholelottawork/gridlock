@@ -4,6 +4,11 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 
 type DayData = { day: string; earn: number; jobs: number }
 
+function openStakePage(): void {
+  const gl = (window as unknown as { gridlock?: { app: { openStakePage: () => Promise<void> } } }).gridlock
+  void gl?.app.openStakePage()
+}
+
 export default function Earnings() {
   const [history, setHistory] = useState<DayData[]>([])
   const [total, setTotal] = useState(0)
@@ -108,10 +113,10 @@ export default function Earnings() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button style={{ flex: 1, padding: '8px 0', background: 'var(--text-primary)', color: '#000000', border: '1px solid var(--text-primary)', borderRadius: 5, fontWeight: 800, fontSize: 12, cursor: 'pointer' }}>
+          <button type="button" onClick={openStakePage} style={{ flex: 1, padding: '8px 0', background: 'var(--text-primary)', color: '#000000', border: '1px solid var(--text-primary)', borderRadius: 5, fontWeight: 800, fontSize: 12, cursor: 'pointer' }}>
             STAKE MORE
           </button>
-          <button style={{ flex: 1, padding: '8px 0', background: 'var(--accent-dim)', color: 'var(--text-primary)', border: '1px solid var(--border-2)', borderRadius: 5, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
+          <button type="button" onClick={openStakePage} style={{ flex: 1, padding: '8px 0', background: 'var(--accent-dim)', color: 'var(--text-primary)', border: '1px solid var(--border-2)', borderRadius: 5, fontWeight: 700, fontSize: 12, cursor: 'pointer' }}>
             UNSTAKE
           </button>
         </div>

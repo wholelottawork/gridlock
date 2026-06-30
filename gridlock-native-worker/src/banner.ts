@@ -5,17 +5,15 @@ import { fileURLToPath } from "node:url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const CHEVRONS = `
-\\      \\\      \\                          //      ///      //
-  \\\\    \\\\    \\\\                    ////    ////    ////
-     \\\\    \\\\     \\\              ///     ////    ////
-        \\\\     \\\     \\\        ///     ///     ////
-           \\\\    \\\\     \\\\////     ////    ////
-               \\\     \\\     \/     ///     ///
-                 \\\\     \\\\    ////     ////
-                     \\\     \\\///     ///
-                        \\\\        ////
-                           \\\\  ////
-                              \\//
+\\                        //
+ \\                      //
+  \\                    //
+   \\                  //
+    \\                //
+     \\              //
+      \\            //
+       \\          //
+        \\        //
 `.trimEnd();
 
 export function printStartupBanner(): void {

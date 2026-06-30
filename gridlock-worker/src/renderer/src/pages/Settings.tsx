@@ -167,7 +167,7 @@ export default function Settings() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
           <div>
             <div style={{ fontWeight: 700, fontSize: 12 }}>TEE / Confidential Mode</div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', marginTop: 2 }}>Register as TEE-capable for privacy jobs. Dev mode on consumer GPU; production needs H100 CC.</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', marginTop: 2 }}>Register as TEE-capable for privacy jobs.</div>
           </div>
           <Toggle on={teeMode} onToggle={() => setTeeMode(v => !v)} />
         </div>
@@ -186,8 +186,8 @@ export default function Settings() {
         <div style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '1.2px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 12 }}>ABOUT</div>
         <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
           {[
-            ['Version', '0.1.0'],
-            ['Network', 'Solana Devnet'],
+            ['Version', '0.1.2'],
+            ['Network', 'Solana Mainnet'],
           ].map(([k, v]) => (
             <div key={k} style={{ display: 'flex', justifyContent: 'space-between' }}>
               <span style={{ color: 'var(--text-secondary)', fontWeight: 700 }}>{k}</span>

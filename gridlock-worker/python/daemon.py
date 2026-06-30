@@ -13,12 +13,19 @@ import hashlib
 import json
 import os
 import ssl
+import sys
 import threading
 import time
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
+from pathlib import Path
 from urllib.parse import quote
+
+# Embeddable Python on Windows may not put the script dir on sys.path.
+_SCRIPT_DIR = Path(__file__).resolve().parent
+if str(_SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(_SCRIPT_DIR))
 
 from job_messages import prepare_inference_messages
 import inference

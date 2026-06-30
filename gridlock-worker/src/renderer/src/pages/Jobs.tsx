@@ -18,18 +18,32 @@ function fmtAge(ts: number): string {
   return `${Math.floor(s / 3600)}h ago`
 }
 
+function isValidWallet(wallet: string): boolean {
+  const w = wallet.trim()
+  return w.length >= 32 && w.length <= 64
+}
+
 export default function Jobs() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [filter, setFilter] = useState<'all' | 'completed' | 'failed'>('all')
+  const [walletConnected, setWalletConnected] = useState(false)
 
   useEffect(() => {
-    const gl = (window as unknown as { gridlock?: { worker: { jobs: () => Promise<{ jobs: Job[] }> } } }).gridlock
+    const gl = (window as unknown as {
+      gridlock?: {
+        worker: { jobs: () => Promise<{ jobs: Job[] }> }
+        settings: { load: () => Promise<{ wallet: string }> }
+      }
+    }).gridlock
     if (!gl) return
+
+    gl.settings.load().then(s => setWalletConnected(isValidWallet(s.wallet))).catch(() => {})
+
     const poll = () => {
       gl.worker.jobs().then(r => setJobs(r.jobs as Job[])).catch(() => {})
     }
     poll()
-    const iv = setInterval(poll, 3000)
+    const iv = setInterval(poll, 5000)
     return () => clearInterval(iv)
   }, [])
 
@@ -70,7 +84,9 @@ export default function Jobs() {
       <div className="card" style={{ padding: 0 }}>
         {visible.length === 0 ? (
           <div style={{ padding: 28, textAlign: 'center', color: 'var(--text-muted)', fontSize: 12, fontWeight: 600 }}>
-            No jobs yet — start the worker on the Dashboard.
+            {!walletConnected
+              ? 'Connect your wallet in Settings to see job history.'
+              : 'No jobs yet — start the worker on the Dashboard.'}
           </div>
         ) : visible.map(j => (
           <div key={j.id} style={{
@@ -78,8 +94,8 @@ export default function Jobs() {
             alignItems: 'center', padding: '9px 13px',
             borderBottom: '1px solid var(--border)', gap: 8, fontSize: 11,
           }}>
-            <span style={{ color: j.status === 'completed' ? 'var(--success)' : 'var(--error)', fontWeight: 800 }}>
-              {j.status === 'completed' ? '✓' : '✗'}
+            <span style={{ color: j.status === 'completed' ? 'var(--success)' : j.status === 'running' ? 'var(--text-primary)' : 'var(--error)', fontWeight: 800 }}>
+              {j.status === 'completed' ? '✓' : j.status === 'running' ? '…' : '✗'}
             </span>
             <span className="mono" style={{ color: 'var(--text-secondary)', fontSize: 10 }}>#{j.id.slice(0, 12)}</span>
             <span style={{ color: 'var(--text-muted)', fontSize: 10 }}>{j.tier ?? '—'}</span>

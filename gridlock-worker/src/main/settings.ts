@@ -7,6 +7,11 @@ export const GRIDLOCK_API_URL = (
   process.env.GRIDLOCK_BACKEND_URL ?? 'https://api.grid-lock.tech'
 ).replace(/\/$/, '')
 
+/** Web app stake page — stake/unstake UI lives here, not in the worker. */
+export const GRIDLOCK_STAKE_URL = (
+  process.env.GRIDLOCK_STAKE_URL ?? 'https://grid-lock.tech/stake'
+).replace(/\/$/, '')
+
 export type ComputeDevice = 'auto' | 'cpu' | 'gpu'
 
 export interface WorkerSettings {
