@@ -1,5 +1,5 @@
 export const DEFAULT_BACKEND_URL =
-  process.env.GRIDLOCK_BACKEND_URL ?? "https://api.reacton.dev";
+  process.env.GRIDLOCK_BACKEND_URL ?? "https://api.grid-lock.tech";
 
 /** Gridlock router — jobs, registration, WebSocket. */
 export const ROUTER_URL = DEFAULT_BACKEND_URL;

@@ -26,7 +26,7 @@ import hardware_detect
 
 # ── Config ────────────────────────────────────────────────────────────────────
 
-BACKEND_URL   = os.getenv("GRIDLOCK_BACKEND_URL", "https://api.reacton.dev")
+BACKEND_URL   = os.getenv("GRIDLOCK_BACKEND_URL", "https://api.grid-lock.tech")
 WALLET_ADDR   = os.getenv("GRIDLOCK_WALLET", "")
 ROLE          = os.getenv("GRIDLOCK_ROLE", "Prefill")
 TEE_CAPABLE   = os.getenv("GRIDLOCK_TEE", "false").lower() == "true"

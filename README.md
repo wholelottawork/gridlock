@@ -2,7 +2,7 @@
 
 Decentralized AI inference marketplace on Solana with enforceable latency SLAs. Customers send OpenAI-compatible requests; GPU and CPU workers run inference locally; the router measures TTFT/TPOT and coordinates optional on-chain LOCK settlement.
 
-**Production API:** [https://api.reacton.dev](https://api.reacton.dev)
+**Production API:** [https://api.grid-lock.tech](https://api.grid-lock.tech)
 
 <p>
   <strong>Frontend &nbsp;</strong>
@@ -151,7 +151,7 @@ Set the router URL:
 NEXT_PUBLIC_API_URL=http://localhost:8081
 ```
 
-When deployed (e.g. reacton.dev), the web app defaults to `https://api.reacton.dev` if `NEXT_PUBLIC_API_URL` is unset and the host is not localhost.
+When deployed (e.g. grid-lock.tech), the web app defaults to `https://api.grid-lock.tech` if `NEXT_PUBLIC_API_URL` is unset and the host is not localhost.
 
 App runs at [http://localhost:3000](http://localhost:3000).
 
@@ -171,7 +171,7 @@ npm run dev
 3. Complete **Setup** (Ollama + model) — packaged app guides you; dev mode needs local Ollama.
 4. Click **Start Worker**.
 
-Production API: **`https://api.reacton.dev`** (override with `GRIDLOCK_BACKEND_URL` for local dev).
+Production API: **`https://api.grid-lock.tech`** (override with `GRIDLOCK_BACKEND_URL` for local dev).
 
 Package: `npm run package` on Windows → `release/Gridlock-Worker-Setup-0.1.0.exe` (version from `package.json`)
 
@@ -196,7 +196,7 @@ Starts Redis (6379), router (8080), web (3000).
 
 ### Production tunnel (Cloudflare)
 
-See `gridlock/cloudflare/cloudflare.env.example` and `gridlock/cloudflare/setup-tunnel.sh` to expose the router at a public hostname (e.g. `api.reacton.dev`).
+See `gridlock/cloudflare/cloudflare.env.example` and `gridlock/cloudflare/setup-tunnel.sh` to expose the router at a public hostname (e.g. `api.grid-lock.tech`).
 
 ## Wallet model
 
@@ -224,7 +224,7 @@ Two layers keep signatures minimal:
 ### Chat completions (Console / API)
 
 ```bash
-curl https://api.reacton.dev/v1/chat/completions \
+curl https://api.grid-lock.tech/v1/chat/completions \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer your-api-key" \
   -d '{
@@ -253,7 +253,7 @@ Set `"stream": true` for SSE streaming in OpenAI chunk format.
 Workers register with the router (no API key required for worker routes):
 
 ```bash
-curl -X POST https://api.reacton.dev/v1/workers/register \
+curl -X POST https://api.grid-lock.tech/v1/workers/register \
   -H "Content-Type: application/json" \
   -d '{
     "operator_pubkey": "YourSolanaWalletAddress",
@@ -267,7 +267,7 @@ curl -X POST https://api.reacton.dev/v1/workers/register \
 Heartbeats while running:
 
 ```bash
-curl -X POST https://api.reacton.dev/v1/workers/heartbeat \
+curl -X POST https://api.grid-lock.tech/v1/workers/heartbeat \
   -H "Content-Type: application/json" \
   -d '{"worker_address": "YourAddress", "goodput_score": 847}'
 ```
@@ -277,7 +277,7 @@ Workers connect via **WebSocket** at `/v1/ws` with `worker:register` (`worker_ty
 Check operator status (includes live connection info):
 
 ```bash
-curl https://api.reacton.dev/v1/workers/YOUR_WALLET_ADDRESS
+curl https://api.grid-lock.tech/v1/workers/YOUR_WALLET_ADDRESS
 ```
 
 Response includes `ws_online`, `ws_worker_type`, `ws_busy`, and recent jobs.
@@ -415,7 +415,7 @@ NEXT_PUBLIC_LOCK_MINT=your-devnet-lock-mint
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GRIDLOCK_BACKEND_URL` | `https://api.reacton.dev` | Router URL |
+| `GRIDLOCK_BACKEND_URL` | `https://api.grid-lock.tech` | Router URL |
 | `GRIDLOCK_WALLET` | — | Solana public address |
 | `GRIDLOCK_COMPUTE_DEVICE` | `auto` | `auto`, `cpu`, or `gpu` |
 | `GRIDLOCK_OLLAMA_MODEL` | `llama3.1:8b` | Ollama model |

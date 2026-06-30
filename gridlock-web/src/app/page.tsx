@@ -305,7 +305,7 @@ export default function LandingPage() {
                   </p>
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                     {[
-                      { step: "1", text: "Point your SDK at api.gridlock.xyz" },
+                      { step: "1", text: "Point your SDK at api.grid-lock.tech" },
                       { step: "2", text: "Add sla: 'realtime' to your request" },
                       { step: "3", text: "Get paid back if it's late" },
                     ].map((s) => (
@@ -321,7 +321,7 @@ export default function LandingPage() {
                   { text: "import OpenAI from 'openai'" },
                   { text: "" },
                   { text: "const client = new OpenAI({" },
-                  { text: "  baseURL: 'https://api.gridlock.xyz/v1',", indent: 1 },
+                  { text: "  baseURL: 'https://api.grid-lock.tech/v1',", indent: 1 },
                   { text: "  apiKey: process.env.GRIDLOCK_KEY,", indent: 1 },
                   { text: "})" },
                   { text: "" },

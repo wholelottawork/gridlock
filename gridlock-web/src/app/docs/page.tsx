@@ -79,7 +79,7 @@ const SECTIONS_CONTENT: Record<Section, React.ReactNode> = {
       <Code language="typescript">{`import OpenAI from 'openai'
 
 const gridlock = new OpenAI({
-  baseURL: 'https://api.gridlock.network/v1',  // or http://localhost:8080/v1 locally
+  baseURL: 'https://api.grid-lock.tech/v1',  // or http://localhost:8080/v1 locally
   apiKey: 'your-gridlock-api-key',
 })
 
@@ -120,7 +120,7 @@ if (!meta.sla_met) {
   api: (
     <div>
       <H2>REST API Reference</H2>
-      <P>Base URL: <code style={{ fontFamily: "monospace", color: "var(--orange)" }}>http://localhost:8080</code> (local) · <code style={{ fontFamily: "monospace", color: "var(--orange)" }}>https://api.gridlock.network</code> (production)</P>
+      <P>Base URL: <code style={{ fontFamily: "monospace", color: "var(--orange)" }}>http://localhost:8080</code> (local) · <code style={{ fontFamily: "monospace", color: "var(--orange)" }}>https://api.grid-lock.tech</code> (production)</P>
       <P>All endpoints accept and return JSON. Authenticated endpoints require <code style={{ fontFamily: "monospace", color: "var(--orange)" }}>Authorization: Bearer {"{"}api-key{"}"}</code>.</P>
 
       <H3>POST /v1/chat/completions</H3>

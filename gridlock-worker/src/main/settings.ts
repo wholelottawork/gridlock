@@ -4,7 +4,7 @@ import path from 'path'
 
 /** Production Gridlock router — not user-configurable. Dev override: GRIDLOCK_BACKEND_URL env. */
 export const GRIDLOCK_API_URL = (
-  process.env.GRIDLOCK_BACKEND_URL ?? 'https://api.reacton.dev'
+  process.env.GRIDLOCK_BACKEND_URL ?? 'https://api.grid-lock.tech'
 ).replace(/\/$/, '')
 
 export type ComputeDevice = 'auto' | 'cpu' | 'gpu'

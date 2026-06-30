@@ -1,4 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import ws from "ws";
 import { config } from "./config.js";
 import type { ApiKeyRecord, BillingInvoiceRecord, JobRecord, WorkerRecord } from "./types.js";
 
@@ -8,7 +9,9 @@ function getClient(): SupabaseClient | null {
   if (sbClient) return sbClient;
   if (!config.supabaseUrl || !config.supabaseKey) return null;
   try {
-    sbClient = createClient(config.supabaseUrl, config.supabaseKey);
+    sbClient = createClient(config.supabaseUrl, config.supabaseKey, {
+      realtime: { transport: ws },
+    });
     console.log("[supabase] client ready");
     return sbClient;
   } catch (error) {

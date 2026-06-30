@@ -1,6 +1,6 @@
 # @gridlock/native-worker
 
-Headless GPU worker for [Gridlock](https://reacton.dev). Connects to the router over WebSocket and runs inference through **Ollama** (recommended on Windows) or **vLLM**.
+Headless GPU worker for [Gridlock](https://grid-lock.tech). Connects to the router over WebSocket and runs inference through **Ollama** (recommended on Windows) or **vLLM**.
 
 ## Quick start (Windows)
 
@@ -30,7 +30,7 @@ node dist/index.js --wallet YOUR_SOLANA_PUBKEY
 
 ```
 --wallet <pubkey>       Worker wallet address (required, or GRIDLOCK_WALLET)
---url <url>             Backend URL (default: https://api.reacton.dev)
+--url <url>             Backend URL (default: https://api.grid-lock.tech)
 --inference <backend>   auto | ollama | vllm (default: auto)
 --benchmark             Benchmark only, then exit
 --version               Show version
@@ -42,7 +42,7 @@ node dist/index.js --wallet YOUR_SOLANA_PUBKEY
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `GRIDLOCK_WALLET` | — | Solana pubkey |
-| `GRIDLOCK_BACKEND_URL` | `https://api.reacton.dev` | Router API |
+| `GRIDLOCK_BACKEND_URL` | `https://api.grid-lock.tech` | Router API |
 | `GRIDLOCK_INFERENCE` | `auto` | `auto`, `ollama`, or `vllm` |
 | `GRIDLOCK_OLLAMA_URL` | `http://127.0.0.1:11434` | Ollama API |
 | `GRIDLOCK_OLLAMA_MODEL` | `llama3.1:8b` | Ollama model |

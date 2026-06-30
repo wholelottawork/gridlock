@@ -1,4 +1,4 @@
-/** Same backend the desktop worker uses in production (api.reacton.dev). */
+/** Production API: api.grid-lock.tech (override with NEXT_PUBLIC_API_URL). */
 import {
   INSECURE_KEY_MANAGEMENT,
   walletAuthHeaderRecord,
@@ -11,7 +11,8 @@ export function resolveApiBaseUrl(): string {
   if (typeof window !== "undefined") {
     const host = window.location.hostname;
     if (host !== "localhost" && host !== "127.0.0.1") {
-      return "https://api.reacton.dev";
+      const root = host.replace(/^www\./, "");
+      return `https://api.${root}`;
     }
   }
   return "http://localhost:8080";
