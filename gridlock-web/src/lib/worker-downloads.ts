@@ -1,7 +1,7 @@
 /** Production download URLs for the Gridlock Worker desktop app (electron-builder). */
 const REPO = process.env.NEXT_PUBLIC_WORKER_RELEASE_REPO ?? "wholelottawork/gridlock";
 
-export const WORKER_APP_VERSION = process.env.NEXT_PUBLIC_WORKER_VERSION ?? "0.1.0";
+export const WORKER_APP_VERSION = process.env.NEXT_PUBLIC_WORKER_VERSION ?? "0.1.3";
 
 /** GitHub release tag, e.g. worker-v0.1.0 */
 const TAG =

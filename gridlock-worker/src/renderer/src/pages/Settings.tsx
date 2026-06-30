@@ -186,7 +186,7 @@ export default function Settings() {
         <div style={{ fontSize: 8.5, fontWeight: 700, letterSpacing: '1.2px', color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: 12 }}>ABOUT</div>
         <div style={{ fontSize: 11, color: 'var(--text-secondary)', lineHeight: 1.8 }}>
           {[
-            ['Version', '0.1.2'],
+            ['Version', '0.1.3'],
             ['Network', 'Solana Mainnet'],
           ].map(([k, v]) => (
             <div key={k} style={{ display: 'flex', justifyContent: 'space-between' }}>
